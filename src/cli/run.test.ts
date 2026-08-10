@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { runCli } from './run.js';
 
@@ -64,5 +66,63 @@ describe('runCli', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('tenets [path] [options]');
+  });
+
+  it('creates AGENTS.md and CLAUDE.md with agent guidance when installing in a fresh directory', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-install-'));
+
+    const result = await runCli(['install', dir]);
+
+    expect(result.exitCode).toBe(0);
+    const agentsContent = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+    const claudeContent = fs.readFileSync(path.join(dir, 'CLAUDE.md'), 'utf8');
+    expect(agentsContent).toContain('npx @diego22rct/tenets');
+    expect(claudeContent).toContain('npx @diego22rct/tenets');
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('appends to an existing AGENTS.md/CLAUDE.md instead of overwriting their content', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-install-'));
+    fs.writeFileSync(path.join(dir, 'AGENTS.md'), '# My project\n\nSome existing notes.\n');
+    fs.writeFileSync(path.join(dir, 'CLAUDE.md'), '# My project\n\nSome existing notes.\n');
+
+    const result = await runCli(['install', dir]);
+
+    expect(result.exitCode).toBe(0);
+    const agentsContent = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+    const claudeContent = fs.readFileSync(path.join(dir, 'CLAUDE.md'), 'utf8');
+    expect(agentsContent).toContain('Some existing notes.');
+    expect(agentsContent).toContain('npx @diego22rct/tenets');
+    expect(claudeContent).toContain('Some existing notes.');
+    expect(claudeContent).toContain('npx @diego22rct/tenets');
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('does not duplicate the rule when install runs a second time', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-install-'));
+
+    await runCli(['install', dir]);
+    await runCli(['install', dir]);
+
+    const agentsContent = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+    const occurrences = agentsContent.split('npx @diego22rct/tenets').length - 1;
+    expect(occurrences).toBe(1);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('--help still takes priority over the install subcommand', async () => {
+    const result = await runCli(['install', '--help']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('tenets [path] [options]');
+  });
+
+  it('mentions the install subcommand in --help output', async () => {
+    const result = await runCli(['--help']);
+
+    expect(result.stdout).toContain('install');
   });
 });

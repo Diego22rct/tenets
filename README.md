@@ -57,6 +57,14 @@ Every finding carries a fixed `severity` (`info` | `warning` | `error` — `erro
 
 No config file yet — thresholds above are fixed. Ignoring paths and per-rule overrides are planned but not implemented.
 
+## AI agent integration
+
+```
+npx @diego22rct/tenets install [path]
+```
+
+Adds a short rule to `AGENTS.md` and `CLAUDE.md` in the target project (`path` defaults to the current directory) telling AI coding agents — Claude Code, Codex CLI, Cursor, Windsurf, and the growing list of tools that read `AGENTS.md` — to run `tenets` after finishing a coding task or before committing, and how to interpret its severity tiers and exit codes. Creates either file if it doesn't exist; appends to it (without touching existing content) if it does. Safe to re-run — it won't duplicate the rule on a second `install`.
+
 ## Programmatic usage
 
 ```ts
