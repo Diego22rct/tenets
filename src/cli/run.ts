@@ -12,7 +12,25 @@ type Format = 'terminal' | 'json';
 const SEVERITY_ORDER: Record<Severity, number> = { info: 0, warning: 1, error: 2 };
 const DEFAULT_FAIL_ON: Severity = 'warning';
 
+const HELP_TEXT = `Usage: tenets [path] [options]
+
+Static analysis for SOLID/DRY/KISS/YAGNI violations in TypeScript codebases.
+'path' defaults to the current directory.
+
+Options:
+  --format <terminal|json>       Output format (default: terminal)
+  --fail-on <info|warning|error> Minimum severity that causes a non-zero exit code (default: warning)
+  --help, -h                     Show this help text
+
+Example:
+  tenets ./src --format json --fail-on error
+`;
+
 export async function runCli(argv: string[]): Promise<CliResult> {
+  if (argv.includes('--help') || argv.includes('-h')) {
+    return { exitCode: 0, stdout: HELP_TEXT };
+  }
+
   const options = parseArgs(argv);
 
   let result: AnalysisResult;

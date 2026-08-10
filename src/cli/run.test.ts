@@ -49,4 +49,20 @@ describe('runCli', () => {
 
     expect(result.exitCode).toBe(2);
   });
+
+  it('prints usage and exits 0 when --help is passed, taking priority over other flags', async () => {
+    const result = await runCli(['--help', '--format', 'json', 'some/bogus/path']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('tenets [path] [options]');
+    expect(result.stdout).toContain('--format');
+    expect(result.stdout).toContain('--fail-on');
+  });
+
+  it('also accepts -h as a shorthand for --help', async () => {
+    const result = await runCli(['-h']);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('tenets [path] [options]');
+  });
 });
