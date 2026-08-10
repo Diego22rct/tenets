@@ -10,7 +10,7 @@ import { yagniUnusedExport } from './rules/yagni-unused-export.js';
 import type { AnalysisResult, AnalyzeOptions } from './types.js';
 
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisResult> {
-  const { functionFacts, classFacts, callFacts, exportFacts, importFacts } = parseFacts(options.path);
+  const { functionFacts, classFacts, callFacts, exportFacts, importFacts, skippedFiles } = parseFacts(options.path);
   const findings = [
     ...srpFunctionLength(functionFacts),
     ...kissNestingDepth(functionFacts),
@@ -21,5 +21,5 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisResult> 
     ...yagniUnusedExport(exportFacts, importFacts),
     ...yagniSingleImplInterface(classFacts),
   ];
-  return { findings };
+  return { findings, skippedFiles };
 }

@@ -19,6 +19,24 @@ describe('analyze', () => {
     expect(finding?.location.file).toBe(path.join(target, 'long-function.ts'));
   });
 
+  it('exposes an empty skippedFiles array when every file parses cleanly', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'srp-function-length');
+
+    const result = await analyze({ path: target });
+
+    expect(result.skippedFiles).toEqual([]);
+  });
+
+  it('analyzes a relative path the same as its absolute equivalent', async () => {
+    const absoluteTarget = path.join(fixturesDir, '__fixtures__', 'srp-function-length');
+    const relativeTarget = path.relative(process.cwd(), absoluteTarget);
+
+    const result = await analyze({ path: relativeTarget });
+
+    expect(result.skippedFiles).toEqual([]);
+    expect(result.findings.some((f) => f.ruleId === 'srp/function-length')).toBe(true);
+  });
+
   it('flags an arrow function assigned to a const whose body exceeds the LOC threshold as srp/function-length', async () => {
     const target = path.join(fixturesDir, '__fixtures__', 'srp-function-length-arrow');
 

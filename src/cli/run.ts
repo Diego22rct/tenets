@@ -1,5 +1,5 @@
 import { analyze } from '../core/analyze.js';
-import type { Finding } from '../core/types.js';
+import type { AnalysisResult, Finding } from '../core/types.js';
 
 export interface CliResult {
   exitCode: number;
@@ -15,15 +15,15 @@ const DEFAULT_FAIL_ON: Severity = 'warning';
 export async function runCli(argv: string[]): Promise<CliResult> {
   const options = parseArgs(argv);
 
-  let findings: Finding[];
+  let result: AnalysisResult;
   try {
-    findings = (await analyze({ path: options.path })).findings;
+    result = await analyze({ path: options.path });
   } catch {
     return { exitCode: 2, stdout: `tenets: failed to analyze '${options.path}'\n` };
   }
 
-  const stdout = options.format === 'json' ? formatJson(findings) : formatTerminal(findings);
-  const failing = findings.some((f) => SEVERITY_ORDER[f.severity] >= SEVERITY_ORDER[options.failOn]);
+  const stdout = options.format === 'json' ? formatJson(result) : formatTerminal(result);
+  const failing = result.findings.some((f) => SEVERITY_ORDER[f.severity] >= SEVERITY_ORDER[options.failOn]);
 
   return { exitCode: failing ? 1 : 0, stdout };
 }
@@ -53,17 +53,20 @@ function parseArgs(argv: string[]): CliOptions {
   return { path: targetPath, format, failOn };
 }
 
-function formatTerminal(findings: Finding[]): string {
-  if (findings.length === 0) {
-    return 'tenets: no violations found\n';
-  }
+function formatTerminal({ findings, skippedFiles }: AnalysisResult): string {
+  const body =
+    findings.length === 0
+      ? 'tenets: no violations found\n'
+      : `${findings
+          .map((f) => `[${f.severity}] ${f.ruleId} ${f.location.file}:${f.location.startLine}\n  ${f.message}`)
+          .join('\n\n')}\n\ntenets: ${findings.length} finding(s)\n`;
 
-  const lines = findings.map(
-    (f) => `[${f.severity}] ${f.ruleId} ${f.location.file}:${f.location.startLine}\n  ${f.message}`,
-  );
-  return `${lines.join('\n\n')}\n\ntenets: ${findings.length} finding(s)\n`;
+  if (skippedFiles.length === 0) {
+    return body;
+  }
+  return `${body}tenets: ${skippedFiles.length} file(s) could not be analyzed: ${skippedFiles.join(', ')}\n`;
 }
 
-function formatJson(findings: Finding[]): string {
-  return JSON.stringify({ findings }, null, 2);
+function formatJson(result: AnalysisResult): string {
+  return JSON.stringify(result, null, 2);
 }

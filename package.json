@@ -20,7 +20,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "typescript": "^5.6.3"
+    "typescript": "^7.0.2"
   },
   "devDependencies": {
     "vitest": "^2.1.4",

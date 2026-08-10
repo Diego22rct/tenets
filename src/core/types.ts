@@ -68,4 +68,5 @@ export interface AnalyzeOptions {
 
 export interface AnalysisResult {
   findings: Finding[];
+  skippedFiles: string[];
 }
