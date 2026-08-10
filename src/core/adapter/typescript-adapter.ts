@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import ignore, { type Ignore } from 'ignore';
 import {
   isArrowFunction,
   isBinaryExpression,
@@ -393,12 +394,12 @@ function computeNormalizedBodySignature(node: Node): string {
 }
 
 function isSourceFileName(name: string): boolean {
+  if (name.endsWith('.d.ts')) return false;
   return name.endsWith('.ts') || name.endsWith('.tsx');
 }
 
 const EXCLUDED_DIRECTORY_NAMES = new Set([
   'node_modules',
-  '__fixtures__',
   '.git',
   'dist',
   'build',
@@ -417,15 +418,33 @@ export function findSourceFiles(rootPath: string): string[] {
     return isSourceFileName(resolvedRootPath) ? [resolvedRootPath] : [];
   }
 
+  const candidates = walkDirectory(resolvedRootPath);
+  const gitignoreFilter = loadGitignoreFilter(resolvedRootPath);
+  if (!gitignoreFilter) return candidates;
+
+  return candidates.filter((file) => {
+    const relativePath = path.relative(resolvedRootPath, file).replaceAll('\\', '/');
+    return !gitignoreFilter.ignores(relativePath);
+  });
+}
+
+function walkDirectory(dirPath: string): string[] {
   const results: string[] = [];
-  for (const entry of fs.readdirSync(resolvedRootPath, { withFileTypes: true })) {
+  for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
     if (EXCLUDED_DIRECTORY_NAMES.has(entry.name)) continue;
-    const entryPath = path.join(resolvedRootPath, entry.name);
+    const entryPath = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
-      results.push(...findSourceFiles(entryPath));
+      results.push(...walkDirectory(entryPath));
     } else if (entry.isFile() && isSourceFileName(entry.name)) {
       results.push(entryPath);
     }
   }
   return results;
+}
+
+function loadGitignoreFilter(rootPath: string): Ignore | undefined {
+  const gitignorePath = path.join(rootPath, '.gitignore');
+  if (!fs.existsSync(gitignorePath)) return undefined;
+  const content = fs.readFileSync(gitignorePath, 'utf8');
+  return ignore().add(content);
 }

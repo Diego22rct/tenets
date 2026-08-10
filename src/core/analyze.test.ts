@@ -148,8 +148,19 @@ describe('analyze', () => {
     expect(finding?.location.file).toBe(path.join(target, 'repository.ts'));
   });
 
-  it('excludes __fixtures__ directories from analysis', async () => {
-    const target = path.join(fixturesDir, '__fixtures__', 'skip-fixtures-directory');
+  it('scans nested __fixtures__ directories rather than silently excluding them', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'scans-nested-fixtures-directory');
+
+    const result = await analyze({ path: target });
+
+    const findings = result.findings.filter((f) => f.ruleId === 'yagni/unused-export');
+    expect(findings.map((f) => f.location.file).sort()).toEqual(
+      [path.join(target, 'production.ts'), path.join(target, '__fixtures__', 'nested.ts')].sort(),
+    );
+  });
+
+  it('excludes standard build/VCS directories (e.g. dist, .next) from analysis', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'skip-excluded-directories');
 
     const result = await analyze({ path: target });
 
@@ -157,8 +168,16 @@ describe('analyze', () => {
     expect(findings.map((f) => f.location.file)).toEqual([path.join(target, 'production.ts')]);
   });
 
-  it('excludes standard build/VCS directories (e.g. dist, .next) from analysis', async () => {
-    const target = path.join(fixturesDir, '__fixtures__', 'skip-excluded-directories');
+  it('excludes .d.ts declaration files from analysis', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'dts-exclusion');
+
+    const result = await analyze({ path: target });
+
+    expect(result.findings).toEqual([]);
+  });
+
+  it('respects a root .gitignore, excluding files it matches', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'gitignore-respect');
 
     const result = await analyze({ path: target });
 
