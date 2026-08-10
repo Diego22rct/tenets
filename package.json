@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "tenets": "./dist/cli/index.js"
+    "tenets": "dist/cli/index.js"
   },
   "exports": {
     ".": "./dist/core/index.js"
