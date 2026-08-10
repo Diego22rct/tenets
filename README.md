@@ -16,6 +16,7 @@ npx @diego22rct/tenets [path] [options]
 |---|---|---|---|
 | `--format` | `terminal` \| `json` | `terminal` | Output format |
 | `--fail-on` | `info` \| `warning` \| `error` | `warning` | Minimum severity that causes a non-zero exit code |
+| `--help`, `-h` | — | — | Print usage and exit — takes priority over every other flag/path |
 
 ### Exit codes
 
