@@ -396,6 +396,20 @@ function isSourceFileName(name: string): boolean {
   return name.endsWith('.ts') || name.endsWith('.tsx');
 }
 
+const EXCLUDED_DIRECTORY_NAMES = new Set([
+  'node_modules',
+  '__fixtures__',
+  '.git',
+  'dist',
+  'build',
+  'out',
+  '.next',
+  '.turbo',
+  'coverage',
+  '.vercel',
+  '.cache',
+]);
+
 export function findSourceFiles(rootPath: string): string[] {
   const resolvedRootPath = path.resolve(rootPath);
   const stat = fs.statSync(resolvedRootPath);
@@ -405,7 +419,7 @@ export function findSourceFiles(rootPath: string): string[] {
 
   const results: string[] = [];
   for (const entry of fs.readdirSync(resolvedRootPath, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name === '__fixtures__') continue;
+    if (EXCLUDED_DIRECTORY_NAMES.has(entry.name)) continue;
     const entryPath = path.join(resolvedRootPath, entry.name);
     if (entry.isDirectory()) {
       results.push(...findSourceFiles(entryPath));

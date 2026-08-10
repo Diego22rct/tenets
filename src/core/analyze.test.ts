@@ -156,4 +156,13 @@ describe('analyze', () => {
     const findings = result.findings.filter((f) => f.ruleId === 'yagni/unused-export');
     expect(findings.map((f) => f.location.file)).toEqual([path.join(target, 'production.ts')]);
   });
+
+  it('excludes standard build/VCS directories (e.g. dist, .next) from analysis', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'skip-excluded-directories');
+
+    const result = await analyze({ path: target });
+
+    const findings = result.findings.filter((f) => f.ruleId === 'yagni/unused-export');
+    expect(findings.map((f) => f.location.file)).toEqual([path.join(target, 'production.ts')]);
+  });
 });
