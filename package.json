@@ -23,10 +23,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "ignore": "^7.0.6",
     "typescript": "^7.0.2"
   },
   "devDependencies": {
-    "vitest": "^2.1.4",
-    "@types/node": "^22.9.0"
+    "@types/node": "^22.9.0",
+    "vitest": "^2.1.4"
   }
 }
