@@ -7,7 +7,7 @@ export function srpClassMethodCount(facts: ClassFact[]): Finding[] {
     .filter((fact) => fact.methodIds.length > DEFAULT_THRESHOLD)
     .map((fact) => ({
       ruleId: 'srp/class-method-count',
-      principle: 'SRP',
+      principle: 'SOLID',
       severity: 'warning',
       confidence: 'medium',
       message: `Class '${fact.name}' has ${fact.methodIds.length} methods, exceeding the ${DEFAULT_THRESHOLD}-method threshold`,

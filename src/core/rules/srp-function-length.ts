@@ -7,7 +7,7 @@ export function srpFunctionLength(facts: FunctionFact[]): Finding[] {
     .filter((fact) => fact.loc > DEFAULT_THRESHOLD)
     .map((fact) => ({
       ruleId: 'srp/function-length',
-      principle: 'SRP',
+      principle: 'SOLID',
       severity: 'warning',
       confidence: 'medium',
       message: `Function '${fact.name}' is ${fact.loc} lines long, exceeding the ${DEFAULT_THRESHOLD}-line threshold`,

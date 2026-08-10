@@ -13,10 +13,20 @@ describe('analyze', () => {
 
     const finding = result.findings.find((f) => f.ruleId === 'srp/function-length');
     expect(finding).toBeDefined();
-    expect(finding?.principle).toBe('SRP');
+    expect(finding?.principle).toBe('SOLID');
     expect(finding?.severity).toBe('warning');
     expect(finding?.confidence).toBe('medium');
     expect(finding?.location.file).toBe(path.join(target, 'long-function.ts'));
+  });
+
+  it('flags an arrow function assigned to a const whose body exceeds the LOC threshold as srp/function-length', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'srp-function-length-arrow');
+
+    const result = await analyze({ path: target });
+
+    const finding = result.findings.find((f) => f.ruleId === 'srp/function-length');
+    expect(finding).toBeDefined();
+    expect(finding?.location.file).toBe(path.join(target, 'long-arrow-function.ts'));
   });
 
   it('flags a function nested past the depth threshold as kiss/nesting-depth', async () => {
@@ -65,7 +75,7 @@ describe('analyze', () => {
 
     const finding = result.findings.find((f) => f.ruleId === 'srp/class-method-count');
     expect(finding).toBeDefined();
-    expect(finding?.principle).toBe('SRP');
+    expect(finding?.principle).toBe('SOLID');
     expect(finding?.severity).toBe('warning');
     expect(finding?.confidence).toBe('medium');
     expect(finding?.location.file).toBe(path.join(target, 'big-class.ts'));
@@ -78,7 +88,7 @@ describe('analyze', () => {
 
     const finding = result.findings.find((f) => f.ruleId === 'dip/direct-instantiation');
     expect(finding).toBeDefined();
-    expect(finding?.principle).toBe('DIP');
+    expect(finding?.principle).toBe('SOLID');
     expect(finding?.severity).toBe('info');
     expect(finding?.confidence).toBe('medium');
     expect(finding?.location.file).toBe(path.join(target, 'order-service.ts'));
@@ -108,5 +118,14 @@ describe('analyze', () => {
     expect(finding?.severity).toBe('info');
     expect(finding?.confidence).toBe('low');
     expect(finding?.location.file).toBe(path.join(target, 'repository.ts'));
+  });
+
+  it('excludes __fixtures__ directories from analysis', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'skip-fixtures-directory');
+
+    const result = await analyze({ path: target });
+
+    const findings = result.findings.filter((f) => f.ruleId === 'yagni/unused-export');
+    expect(findings.map((f) => f.location.file)).toEqual([path.join(target, 'production.ts')]);
   });
 });

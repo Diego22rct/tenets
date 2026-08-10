@@ -12,46 +12,106 @@ export interface ParsedFacts {
 }
 
 export function parseFacts(rootPath: string): ParsedFacts {
-  const functionFacts: FunctionFact[] = [];
-  const classFacts: ClassFact[] = [];
-  const callFacts: CallFact[] = [];
-  const exportFacts: ExportFact[] = [];
-  const importFacts: ImportFact[] = [];
+  const facts: ParsedFacts = { functionFacts: [], classFacts: [], callFacts: [], exportFacts: [], importFacts: [] };
 
   for (const file of findSourceFiles(rootPath)) {
-    const sourceText = fs.readFileSync(file, 'utf8');
-    const sourceFile = ts.createSourceFile(file, sourceText, ts.ScriptTarget.Latest, true);
-
-    const visit = (node: ts.Node): void => {
-      if (ts.isFunctionDeclaration(node) && node.body) {
-        functionFacts.push(toFunctionFact(node, sourceFile, file));
-        if (hasExportModifier(node)) {
-          exportFacts.push(toExportFact(node, sourceFile, file, 'function'));
-        }
-      } else if (ts.isClassDeclaration(node)) {
-        const methodIds: string[] = [];
-        for (const member of node.members) {
-          if (ts.isMethodDeclaration(member) && member.body) {
-            const methodFact = toFunctionFact(member, sourceFile, file);
-            functionFacts.push(methodFact);
-            methodIds.push(methodFact.id);
-            callFacts.push(...collectNewExpressionCalls(member.body, sourceFile, file));
-          }
-        }
-        classFacts.push(toClassFact(node, sourceFile, file, methodIds, extractImplementsInterfaces(node, sourceFile)));
-        if (hasExportModifier(node)) {
-          exportFacts.push(toExportFact(node, sourceFile, file, 'class'));
-        }
-      } else if (ts.isImportDeclaration(node)) {
-        const importFact = toImportFact(node, sourceFile, file);
-        if (importFact) importFacts.push(importFact);
-      }
-      ts.forEachChild(node, visit);
-    };
-    ts.forEachChild(sourceFile, visit);
+    parseFile(file, facts);
   }
 
-  return { functionFacts, classFacts, callFacts, exportFacts, importFacts };
+  return facts;
+}
+
+function parseFile(file: string, facts: ParsedFacts): void {
+  const sourceText = fs.readFileSync(file, 'utf8');
+  const sourceFile = ts.createSourceFile(file, sourceText, ts.ScriptTarget.Latest, true);
+
+  const visit = (node: ts.Node): void => {
+    collectNodeFacts(node, sourceFile, file, facts);
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(sourceFile, visit);
+}
+
+function collectNodeFacts(node: ts.Node, sourceFile: ts.SourceFile, file: string, facts: ParsedFacts): void {
+  if (ts.isFunctionDeclaration(node) && node.body) {
+    collectFunctionDeclaration(node, sourceFile, file, facts);
+    return;
+  }
+  if (ts.isClassDeclaration(node)) {
+    collectClassDeclaration(node, sourceFile, file, facts);
+    return;
+  }
+  if (ts.isImportDeclaration(node)) {
+    collectImportDeclaration(node, sourceFile, file, facts);
+    return;
+  }
+  if (ts.isVariableDeclaration(node)) {
+    collectVariableDeclaration(node, sourceFile, file, facts);
+  }
+}
+
+function collectFunctionDeclaration(
+  node: ts.FunctionDeclaration,
+  sourceFile: ts.SourceFile,
+  file: string,
+  facts: ParsedFacts,
+): void {
+  facts.functionFacts.push(toFunctionFact(node, sourceFile, file));
+  if (hasExportModifier(node)) {
+    facts.exportFacts.push(toExportFact(node, sourceFile, file, 'function'));
+  }
+}
+
+function collectClassDeclaration(
+  node: ts.ClassDeclaration,
+  sourceFile: ts.SourceFile,
+  file: string,
+  facts: ParsedFacts,
+): void {
+  const methodIds = collectClassMethods(node, sourceFile, file, facts);
+  facts.classFacts.push(toClassFact(node, sourceFile, file, methodIds, extractImplementsInterfaces(node, sourceFile)));
+  if (hasExportModifier(node)) {
+    facts.exportFacts.push(toExportFact(node, sourceFile, file, 'class'));
+  }
+}
+
+function collectClassMethods(
+  node: ts.ClassDeclaration,
+  sourceFile: ts.SourceFile,
+  file: string,
+  facts: ParsedFacts,
+): string[] {
+  const methodIds: string[] = [];
+  for (const member of node.members) {
+    if (!ts.isMethodDeclaration(member) || !member.body) continue;
+    const methodFact = toFunctionFact(member, sourceFile, file);
+    facts.functionFacts.push(methodFact);
+    methodIds.push(methodFact.id);
+    facts.callFacts.push(...collectNewExpressionCalls(member.body, sourceFile, file));
+  }
+  return methodIds;
+}
+
+function collectImportDeclaration(
+  node: ts.ImportDeclaration,
+  sourceFile: ts.SourceFile,
+  file: string,
+  facts: ParsedFacts,
+): void {
+  const importFact = toImportFact(node, sourceFile, file);
+  if (importFact) facts.importFacts.push(importFact);
+}
+
+function collectVariableDeclaration(
+  node: ts.VariableDeclaration,
+  sourceFile: ts.SourceFile,
+  file: string,
+  facts: ParsedFacts,
+): void {
+  if (!ts.isIdentifier(node.name) || !node.initializer || !isBlockBodiedFunctionExpression(node.initializer)) {
+    return;
+  }
+  facts.functionFacts.push(toFunctionFact(node.initializer, sourceFile, file, node.name.text));
 }
 
 function hasExportModifier(node: ts.Node): boolean {
@@ -123,25 +183,44 @@ function collectNewExpressionCalls(node: ts.Node, sourceFile: ts.SourceFile, fil
   return calls;
 }
 
+type BlockBodiedFunctionLike =
+  | ts.FunctionDeclaration
+  | ts.MethodDeclaration
+  | ts.ArrowFunction
+  | ts.FunctionExpression;
+
+function isBlockBodiedFunctionExpression(node: ts.Node): node is ts.ArrowFunction | ts.FunctionExpression {
+  return (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) && !!node.body && ts.isBlock(node.body);
+}
+
 function toFunctionFact(
-  node: ts.FunctionDeclaration | ts.MethodDeclaration,
+  node: BlockBodiedFunctionLike,
   sourceFile: ts.SourceFile,
   file: string,
+  nameOverride?: string,
 ): FunctionFact {
   const location = toLocation(node, sourceFile, file);
-  const name = node.name ? node.name.getText(sourceFile) : '<anonymous>';
+  const name = nameOverride ?? resolveDeclaredName(node, sourceFile);
+  const body = node.body as ts.Block;
 
   return {
     id: `${file}:${location.startLine}:${location.startColumn}`,
     file,
     name,
     loc: location.endLine - location.startLine + 1,
-    nestingDepth: computeNestingDepth(node.body!),
-    cyclomaticComplexity: computeCyclomaticComplexity(node.body!),
-    statementCount: node.body!.statements.length,
-    normalizedBodySignature: computeNormalizedBodySignature(node.body!),
+    nestingDepth: computeNestingDepth(body),
+    cyclomaticComplexity: computeCyclomaticComplexity(body),
+    statementCount: body.statements.length,
+    normalizedBodySignature: computeNormalizedBodySignature(body),
     location,
   };
+}
+
+function resolveDeclaredName(node: BlockBodiedFunctionLike, sourceFile: ts.SourceFile): string {
+  if (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) {
+    return node.name ? node.name.getText(sourceFile) : '<anonymous>';
+  }
+  return '<anonymous>';
 }
 
 function toClassFact(
@@ -275,7 +354,7 @@ function findSourceFiles(rootPath: string): string[] {
 
   const results: string[] = [];
   for (const entry of fs.readdirSync(rootPath, { withFileTypes: true })) {
-    if (entry.name === 'node_modules') continue;
+    if (entry.name === 'node_modules' || entry.name === '__fixtures__') continue;
     const entryPath = path.join(rootPath, entry.name);
     if (entry.isDirectory()) {
       results.push(...findSourceFiles(entryPath));

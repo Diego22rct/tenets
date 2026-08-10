@@ -55,7 +55,7 @@ export interface ImportFact {
 
 export interface Finding {
   ruleId: string;
-  principle: string;
+  principle: 'SOLID' | 'DRY' | 'KISS' | 'YAGNI';
   severity: 'info' | 'warning' | 'error';
   confidence: 'high' | 'medium' | 'low';
   message: string;

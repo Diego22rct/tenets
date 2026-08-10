@@ -17,7 +17,7 @@ export function dipDirectInstantiation(facts: CallFact[]): Finding[] {
     .filter((fact) => fact.isNewExpression && !EXCLUDED_CALLEES.has(fact.calleeExpression))
     .map((fact) => ({
       ruleId: 'dip/direct-instantiation',
-      principle: 'DIP',
+      principle: 'SOLID',
       severity: 'info',
       confidence: 'medium',
       message: `Direct instantiation of '${fact.calleeExpression}' inside a class method bypasses dependency injection`,
