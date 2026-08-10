@@ -1,0 +1,23 @@
+{
+  "name": "@diego22rct/tenets",
+  "version": "0.1.0",
+  "description": "Static analysis CLI for SOLID/DRY/KISS/YAGNI violations in HonoJS + Next.js codebases",
+  "type": "module",
+  "bin": {
+    "tenets": "./dist/cli/index.js"
+  },
+  "exports": {
+    ".": "./dist/core/index.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4",
+    "@types/node": "^22.9.0"
+  }
+}

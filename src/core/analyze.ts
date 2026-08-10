@@ -1,0 +1,25 @@
+import { parseFacts } from './adapter/typescript-adapter.js';
+import { dipDirectInstantiation } from './rules/dip-direct-instantiation.js';
+import { dryExactDuplicate } from './rules/dry-exact-duplicate.js';
+import { kissCyclomaticComplexity } from './rules/kiss-cyclomatic-complexity.js';
+import { kissNestingDepth } from './rules/kiss-nesting-depth.js';
+import { srpClassMethodCount } from './rules/srp-class-method-count.js';
+import { srpFunctionLength } from './rules/srp-function-length.js';
+import { yagniSingleImplInterface } from './rules/yagni-single-impl-interface.js';
+import { yagniUnusedExport } from './rules/yagni-unused-export.js';
+import type { AnalysisResult, AnalyzeOptions } from './types.js';
+
+export async function analyze(options: AnalyzeOptions): Promise<AnalysisResult> {
+  const { functionFacts, classFacts, callFacts, exportFacts, importFacts } = parseFacts(options.path);
+  const findings = [
+    ...srpFunctionLength(functionFacts),
+    ...kissNestingDepth(functionFacts),
+    ...kissCyclomaticComplexity(functionFacts),
+    ...dryExactDuplicate(functionFacts),
+    ...srpClassMethodCount(classFacts),
+    ...dipDirectInstantiation(callFacts),
+    ...yagniUnusedExport(exportFacts, importFacts),
+    ...yagniSingleImplInterface(classFacts),
+  ];
+  return { findings };
+}
