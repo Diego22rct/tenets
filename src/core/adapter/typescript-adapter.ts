@@ -392,11 +392,15 @@ function computeNormalizedBodySignature(node: Node): string {
   return parts.join('|');
 }
 
+function isSourceFileName(name: string): boolean {
+  return name.endsWith('.ts') || name.endsWith('.tsx');
+}
+
 export function findSourceFiles(rootPath: string): string[] {
   const resolvedRootPath = path.resolve(rootPath);
   const stat = fs.statSync(resolvedRootPath);
   if (stat.isFile()) {
-    return resolvedRootPath.endsWith('.ts') ? [resolvedRootPath] : [];
+    return isSourceFileName(resolvedRootPath) ? [resolvedRootPath] : [];
   }
 
   const results: string[] = [];
@@ -405,7 +409,7 @@ export function findSourceFiles(rootPath: string): string[] {
     const entryPath = path.join(resolvedRootPath, entry.name);
     if (entry.isDirectory()) {
       results.push(...findSourceFiles(entryPath));
-    } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+    } else if (entry.isFile() && isSourceFileName(entry.name)) {
       results.push(entryPath);
     }
   }

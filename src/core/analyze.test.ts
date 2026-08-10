@@ -19,6 +19,16 @@ describe('analyze', () => {
     expect(finding?.location.file).toBe(path.join(target, 'long-function.ts'));
   });
 
+  it('scans .tsx files, flagging a component whose body exceeds the LOC threshold as srp/function-length', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'tsx-support');
+
+    const result = await analyze({ path: target });
+
+    const finding = result.findings.find((f) => f.ruleId === 'srp/function-length');
+    expect(finding).toBeDefined();
+    expect(finding?.location.file).toBe(path.join(target, 'component.tsx'));
+  });
+
   it('exposes an empty skippedFiles array when every file parses cleanly', async () => {
     const target = path.join(fixturesDir, '__fixtures__', 'srp-function-length');
 
