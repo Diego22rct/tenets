@@ -170,6 +170,10 @@ function hasExportModifier(node: FunctionDeclaration | ClassDeclaration): boolea
   return node.modifiers?.some((modifier) => modifier.kind === SyntaxKind.ExportKeyword) ?? false;
 }
 
+function hasDefaultModifier(node: FunctionDeclaration | ClassDeclaration): boolean {
+  return node.modifiers?.some((modifier) => modifier.kind === SyntaxKind.DefaultKeyword) ?? false;
+}
+
 function toExportFact(
   node: FunctionDeclaration | ClassDeclaration,
   sourceFile: SourceFile,
@@ -182,7 +186,7 @@ function toExportFact(
     id: `${file}:${location.startLine}:${location.startColumn}`,
     file,
     name: node.name?.text ?? '<anonymous>',
-    kind,
+    kind: hasDefaultModifier(node) ? 'default' : kind,
     location,
   };
 }

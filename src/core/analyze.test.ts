@@ -135,6 +135,15 @@ describe('analyze', () => {
     expect(finding?.location.file).toBe(path.join(target, 'orphan.ts'));
   });
 
+  it('does not flag an unimported `export default function` as yagni/unused-export', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'yagni-default-export');
+
+    const result = await analyze({ path: target });
+
+    const findings = result.findings.filter((f) => f.ruleId === 'yagni/unused-export');
+    expect(findings).toEqual([]);
+  });
+
   it('flags an interface implemented by exactly one class as yagni/single-impl-interface', async () => {
     const target = path.join(fixturesDir, '__fixtures__', 'yagni-single-impl-interface');
 
