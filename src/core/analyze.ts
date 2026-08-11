@@ -1,4 +1,5 @@
 import { parseFacts } from './adapter/typescript-adapter.js';
+import { computeScore } from './score.js';
 import { dipDirectInstantiation } from './rules/dip-direct-instantiation.js';
 import { dryExactDuplicate } from './rules/dry-exact-duplicate.js';
 import { kissCyclomaticComplexity } from './rules/kiss-cyclomatic-complexity.js';
@@ -10,7 +11,7 @@ import { yagniUnusedExport } from './rules/yagni-unused-export.js';
 import type { AnalysisResult, AnalyzeOptions } from './types.js';
 
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisResult> {
-  const { functionFacts, classFacts, callFacts, exportFacts, importFacts, dynamicImportFacts, skippedFiles } =
+  const { functionFacts, classFacts, callFacts, exportFacts, importFacts, dynamicImportFacts, skippedFiles, totalLoc } =
     parseFacts(options.path);
   const findings = [
     ...srpFunctionLength(functionFacts),
@@ -22,5 +23,5 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisResult> 
     ...yagniUnusedExport(exportFacts, importFacts, dynamicImportFacts),
     ...yagniSingleImplInterface(classFacts, importFacts, exportFacts),
   ];
-  return { findings, skippedFiles };
+  return { findings, skippedFiles, score: computeScore(findings, totalLoc) };
 }

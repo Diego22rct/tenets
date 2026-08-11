@@ -24,21 +24,25 @@ npx @diego22rct/tenets [path] [options]
 |---|---|
 | `0` | Ran clean — no findings at or above the `--fail-on` threshold |
 | `1` | Findings at or above the `--fail-on` threshold |
-| `2` | Tool error — bad path, crash |
+| `2` | Tool error — bad path, crash. Stdout includes the underlying error message. |
 
 ### Example
 
 ```
 $ npx @diego22rct/tenets ./src
 
-[warning] srp/function-length src/billing/calculate-totals.ts:85
-  Function 'calculateTotals' is 79 lines long, exceeding the 50-line threshold
+src/billing/calculate-totals.ts:
+  [warning] srp/function-length :85
+    Function 'calculateTotals' is 79 lines long, exceeding the 50-line threshold
+  [warning] yagni/unused-export :59
+    Export 'groupTaxTotals' is not imported anywhere in the analyzed set
 
-[warning] yagni/unused-export src/billing/calculate-totals.ts:59
-  Export 'groupTaxTotals' is not imported anywhere in the analyzed set
-
-tenets: 2 finding(s)
+tenets: 2 finding(s), 4.1 findings/KLOC
 ```
+
+Findings are grouped by file, followed by a summary line with the total count and a severity-weighted **score** — findings per 1000 analyzed lines of code (`info`=1, `warning`=3, `error`=5). Lower is better; it's informational only and doesn't affect the exit code.
+
+`--format json` outputs the same data as compact (non-pretty-printed) JSON, shaped as `{ summary: { totalFindings, score }, files: { "<path>": Finding[] }, skippedFiles: string[] }`.
 
 ## Rules
 
@@ -48,7 +52,7 @@ Every finding carries a fixed `severity` (`info` | `warning` | `error` — `erro
 |---|---|---|---|---|---|
 | `srp/function-length` | SOLID | Function body exceeds N lines | 50 | warning | medium |
 | `srp/class-method-count` | SOLID | Class has more than N methods | 10 | warning | medium |
-| `dip/direct-instantiation` | SOLID | `new X()` inside a class method, X not a built-in (`Date`, `Map`, `Set`, `Array`, `Error`, `RegExp`, `Promise`, ...) | — | info | medium |
+| `dip/direct-instantiation` | SOLID | `new X()` inside a class method, X not a native/runtime global (`Date`, `Map`, `Set`, `Array`, `Error`, `RegExp`, `Promise`, `URL`, `FormData`, `Headers`, ...) | — | info | medium |
 | `dry/exact-duplicate` | DRY | ≥2 functions share a structurally identical body (≥4 statements) | 4 statements | warning | high |
 | `kiss/cyclomatic-complexity` | KISS | Function's cyclomatic complexity exceeds N | 10 | warning | high |
 | `kiss/nesting-depth` | KISS | Function nests control flow deeper than N levels | 4 | warning | high |
@@ -73,7 +77,10 @@ import { analyze } from '@diego22rct/tenets';
 const result = await analyze({ path: './src' });
 // result.findings: Finding[]
 // result.skippedFiles: string[] — files that failed to resolve during parsing
+// result.score: number — severity-weighted findings per 1000 analyzed LOC
 ```
+
+`Finding` and `AnalysisResult` are a **stable public contract** — their field names/shape are relied on directly by the `--format json` CLI output and by AI agents wired up via `tenets install`. Shape changes are deliberate, version-bumped decisions, not incidental refactors.
 
 ## Known limitations
 

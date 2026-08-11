@@ -53,6 +53,7 @@ export interface ParsedFacts {
   importFacts: ImportFact[];
   dynamicImportFacts: DynamicImportFact[];
   skippedFiles: string[];
+  totalLoc: number;
 }
 
 export function parseFacts(rootPath: string): ParsedFacts {
@@ -69,6 +70,7 @@ export function parseFiles(files: string[], rootPath: string): ParsedFacts {
     importFacts: [],
     dynamicImportFacts: [],
     skippedFiles: [],
+    totalLoc: 0,
   };
 
   const api = new API({ cwd: rootPath });
@@ -82,6 +84,7 @@ export function parseFiles(files: string[], rootPath: string): ParsedFacts {
         continue;
       }
       collectFileFacts(sourceFile, file, facts);
+      facts.totalLoc += sourceFile.getLineAndCharacterOfPosition(sourceFile.end).line;
     }
   } finally {
     api.close();

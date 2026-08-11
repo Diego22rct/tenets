@@ -6,6 +6,18 @@ import { analyze } from './analyze.js';
 const fixturesDir = path.dirname(fileURLToPath(import.meta.url));
 
 describe('analyze', () => {
+  it('computes a severity-weighted findings-per-KLOC score', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'quality-score');
+
+    const result = await analyze({ path: target });
+
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]?.severity).toBe('info');
+    // 1 info-severity finding (weight 1) over 7 analyzed LOC: 1 / 7 * 1000 = 142.857... -> 142.9
+    expect(result.score).toBe(142.9);
+  });
+
+
   it('flags a function whose body exceeds the LOC threshold as srp/function-length', async () => {
     const target = path.join(fixturesDir, '__fixtures__', 'srp-function-length');
 

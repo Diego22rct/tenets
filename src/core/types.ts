@@ -62,6 +62,11 @@ export interface DynamicImportFact {
   location: Location;
 }
 
+/**
+ * Stable public contract: field names/shape are relied on by external consumers
+ * (the `--format json` CLI output, and agents wired up via `tenets install`).
+ * Changing this shape is a deliberate, version-bumped decision, not an incidental refactor.
+ */
 export interface Finding {
   ruleId: string;
   principle: 'SOLID' | 'DRY' | 'KISS' | 'YAGNI';
@@ -75,7 +80,13 @@ export interface AnalyzeOptions {
   path: string;
 }
 
+/**
+ * Stable public contract: field names/shape are relied on by external consumers
+ * (the `--format json` CLI output, and agents wired up via `tenets install`).
+ * Changing this shape is a deliberate, version-bumped decision, not an incidental refactor.
+ */
 export interface AnalysisResult {
   findings: Finding[];
   skippedFiles: string[];
+  score: number;
 }
