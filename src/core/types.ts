@@ -42,6 +42,7 @@ export interface ExportFact {
   name: string;
   kind: 'function' | 'class' | 'const' | 'type' | 'default';
   location: Location;
+  source?: string;
 }
 
 export interface ImportFact {
@@ -50,6 +51,14 @@ export interface ImportFact {
   source: string;
   importedNames: string[];
   isTypeOnly: boolean;
+  location: Location;
+}
+
+export interface DynamicImportFact {
+  id: string;
+  file: string;
+  source: string;
+  accessedName: string;
   location: Location;
 }
 

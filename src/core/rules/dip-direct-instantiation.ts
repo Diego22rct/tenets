@@ -10,6 +10,19 @@ const EXCLUDED_CALLEES = new Set([
   'Error',
   'RegExp',
   'Promise',
+  'URL',
+  'URLSearchParams',
+  'FormData',
+  'Headers',
+  'Request',
+  'Response',
+  'Blob',
+  'File',
+  'ArrayBuffer',
+  'Uint8Array',
+  'Int32Array',
+  'Float32Array',
+  'AbortController',
 ]);
 
 export function dipDirectInstantiation(facts: CallFact[]): Finding[] {
