@@ -8,7 +8,55 @@ import { runCli } from './run.js';
 const cliFixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '__fixtures__');
 const coreFixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'core', '__fixtures__');
 
+async function withTty<T>(isTTY: boolean, fn: () => Promise<T>): Promise<T> {
+  const original = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
+  Object.defineProperty(process.stdout, 'isTTY', { value: isTTY, configurable: true });
+  try {
+    return await fn();
+  } finally {
+    if (original) {
+      Object.defineProperty(process.stdout, 'isTTY', original);
+    } else {
+      delete (process.stdout as { isTTY?: boolean }).isTTY;
+    }
+  }
+}
+
 describe('runCli', () => {
+  it('colors the [warning] severity tag yellow when stdout is a TTY', async () => {
+    const target = path.join(coreFixturesDir, 'srp-function-length');
+
+    const result = await withTty(true, () => runCli([target]));
+
+    expect(result.stdout).toContain('\x1b[33m[warning]\x1b[39m');
+  });
+
+  it('shows a full red score gauge when the score is at or above the 20 findings/KLOC cap', async () => {
+    const target = path.join(coreFixturesDir, 'quality-score');
+
+    const result = await withTty(true, () => runCli([target, '--fail-on', 'info']));
+
+    expect(result.stdout).toContain(`\x1b[31m${'█'.repeat(10)}\x1b[39m`);
+  });
+
+  it('shows a half-filled yellow score gauge at exactly 10 findings/KLOC', async () => {
+    const target = path.join(cliFixturesDir, 'mid-score');
+
+    const result = await withTty(true, () => runCli([target]));
+
+    expect(result.stdout).toContain('10 findings/KLOC');
+    expect(result.stdout).toContain(`\x1b[33m${'█'.repeat(5)}${'░'.repeat(5)}\x1b[39m`);
+  });
+
+  it('does not color the severity tag when stdout is not a TTY', async () => {
+    const target = path.join(coreFixturesDir, 'srp-function-length');
+
+    const result = await withTty(false, () => runCli([target]));
+
+    expect(result.stdout).not.toContain('\x1b[33m');
+    expect(result.stdout).toContain('[warning]');
+  });
+
   it('exits 0 with a clean report when no findings meet the default fail-on threshold', async () => {
     const target = path.join(cliFixturesDir, 'info-only');
 

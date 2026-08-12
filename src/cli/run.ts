@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import pc from 'picocolors';
 import { analyze } from '../core/analyze.js';
 import type { AnalysisResult, Finding } from '../core/types.js';
 
@@ -103,11 +104,26 @@ function parseArgs(argv: string[]): CliOptions {
   return { path: targetPath, format, failOn };
 }
 
+function shouldUseColor(): boolean {
+  return !!process.stdout.isTTY && !process.env.NO_COLOR;
+}
+
+const SCORE_GAUGE_CAP = 20;
+const SCORE_GAUGE_SEGMENTS = 10;
+
+function formatScoreGauge(score: number, colors: ReturnType<typeof pc.createColors>): string {
+  const filled = Math.round((Math.min(score, SCORE_GAUGE_CAP) / SCORE_GAUGE_CAP) * SCORE_GAUGE_SEGMENTS);
+  const bar = '█'.repeat(filled) + '░'.repeat(SCORE_GAUGE_SEGMENTS - filled);
+  const color = score < 5 ? colors.green : score < 15 ? colors.yellow : colors.red;
+  return color(bar);
+}
+
 function formatTerminal({ findings, skippedFiles, score }: AnalysisResult): string {
+  const colors = pc.createColors(shouldUseColor());
   const body =
     findings.length === 0
       ? 'tenets: no violations found\n'
-      : `${formatFindingsByFile(findings)}\ntenets: ${findings.length} finding(s), ${score} findings/KLOC\n`;
+      : `${formatFindingsByFile(findings, colors)}\ntenets: ${findings.length} finding(s), ${score} findings/KLOC ${formatScoreGauge(score, colors)}\n`;
 
   if (skippedFiles.length === 0) {
     return body;
@@ -115,13 +131,18 @@ function formatTerminal({ findings, skippedFiles, score }: AnalysisResult): stri
   return `${body}tenets: ${skippedFiles.length} file(s) could not be analyzed: ${skippedFiles.join(', ')}\n`;
 }
 
-function formatFindingsByFile(findings: Finding[]): string {
+function formatFindingsByFile(findings: Finding[], colors: ReturnType<typeof pc.createColors>): string {
+  const colorFor: Record<Severity, (text: string) => string> = {
+    info: colors.cyan,
+    warning: colors.yellow,
+    error: colors.red,
+  };
   const files = groupFindingsByFile(findings);
   return Object.entries(files)
     .map(
       ([file, fileFindings]) =>
         `${file}:\n${fileFindings
-          .map((f) => `  [${f.severity}] ${f.ruleId} :${f.location.startLine}\n    ${f.message}`)
+          .map((f) => `  ${colorFor[f.severity](`[${f.severity}]`)} ${f.ruleId} :${f.location.startLine}\n    ${f.message}`)
           .join('\n')}`,
     )
     .join('\n\n');
