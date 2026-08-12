@@ -1,7 +1,14 @@
-import type { ExportFact, Finding, ImportFact } from '../types.js';
+import type { DynamicImportFact, ExportFact, Finding, ImportFact } from '../types.js';
 
-export function yagniUnusedExport(exportFacts: ExportFact[], importFacts: ImportFact[]): Finding[] {
-  const importedNames = new Set(importFacts.flatMap((fact) => fact.importedNames));
+export function yagniUnusedExport(
+  exportFacts: ExportFact[],
+  importFacts: ImportFact[],
+  dynamicImportFacts: DynamicImportFact[] = [],
+): Finding[] {
+  const importedNames = new Set([
+    ...importFacts.flatMap((fact) => fact.importedNames),
+    ...dynamicImportFacts.map((fact) => fact.accessedName),
+  ]);
 
   return exportFacts
     .filter(

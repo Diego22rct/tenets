@@ -17,6 +17,13 @@ const EXCLUDED_CALLEES = new Set([
   'Request',
   'Response',
   'FormData',
+  'Blob',
+  'File',
+  'ArrayBuffer',
+  'Uint8Array',
+  'Int32Array',
+  'Float32Array',
+  'AbortController',
   // NestJS exceptions & utilities
   'HttpException',
   'BadRequestException',

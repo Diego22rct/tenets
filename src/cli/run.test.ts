@@ -27,13 +27,34 @@ describe('runCli', () => {
     expect(result.stdout).toContain('srp/function-length');
   });
 
-  it('outputs valid JSON when --format json is passed', async () => {
-    const target = path.join(coreFixturesDir, 'srp-function-length');
+  it('groups findings by file with a summary line in terminal format', async () => {
+    const target = path.join(cliFixturesDir, 'info-only');
+
+    const result = await runCli([target, '--fail-on', 'info']);
+
+    const orderServiceFile = path.join(target, 'order-service.ts');
+    const fileHeaderIndex = result.stdout.indexOf(orderServiceFile);
+    const findingIndex = result.stdout.indexOf('dip/direct-instantiation');
+    expect(fileHeaderIndex).toBeGreaterThanOrEqual(0);
+    expect(findingIndex).toBeGreaterThan(fileHeaderIndex);
+    expect(result.stdout).toContain('1 finding(s)');
+    expect(result.stdout).toMatch(/[\d.]+ findings\/KLOC/);
+  });
+
+  it('outputs findings grouped by file with a summary when --format json is passed', async () => {
+    const target = path.join(cliFixturesDir, 'info-only');
 
     const result = await runCli([target, '--format', 'json']);
 
-    const parsed = JSON.parse(result.stdout) as { findings: Array<{ ruleId: string }> };
-    expect(parsed.findings.some((f) => f.ruleId === 'srp/function-length')).toBe(true);
+    const parsed = JSON.parse(result.stdout) as {
+      summary: { totalFindings: number; score: number };
+      files: Record<string, Array<{ ruleId: string }>>;
+      skippedFiles: string[];
+    };
+    const orderServiceFile = path.join(target, 'order-service.ts');
+    expect(parsed.summary.totalFindings).toBe(1);
+    expect(parsed.files[orderServiceFile]?.[0]?.ruleId).toBe('dip/direct-instantiation');
+    expect(parsed.skippedFiles).toEqual([]);
   });
 
   it('lowers the fail-on threshold to info, flipping an info-only result to exit 1', async () => {
@@ -50,6 +71,15 @@ describe('runCli', () => {
     const result = await runCli([target]);
 
     expect(result.exitCode).toBe(2);
+  });
+
+  it('surfaces the underlying error message when the target path does not exist', async () => {
+    const target = path.join(cliFixturesDir, 'does-not-exist');
+
+    const result = await runCli([target]);
+
+    expect(result.stdout).toContain(target);
+    expect(result.stdout).not.toBe(`tenets: failed to analyze '${target}'\n`);
   });
 
   it('prints usage and exits 0 when --help is passed, taking priority over other flags', async () => {

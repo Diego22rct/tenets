@@ -49,8 +49,9 @@ export async function runCli(argv: string[]): Promise<CliResult> {
   let result: AnalysisResult;
   try {
     result = await analyze({ path: options.path });
-  } catch {
-    return { exitCode: 2, stdout: `tenets: failed to analyze '${options.path}'\n` };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { exitCode: 2, stdout: `tenets: failed to analyze '${options.path}': ${message}\n` };
   }
 
   const stdout = options.format === 'json' ? formatJson(result) : formatTerminal(result);
@@ -102,13 +103,11 @@ function parseArgs(argv: string[]): CliOptions {
   return { path: targetPath, format, failOn };
 }
 
-function formatTerminal({ findings, skippedFiles }: AnalysisResult): string {
+function formatTerminal({ findings, skippedFiles, score }: AnalysisResult): string {
   const body =
     findings.length === 0
       ? 'tenets: no violations found\n'
-      : `${findings
-          .map((f) => `[${f.severity}] ${f.ruleId} ${f.location.file}:${f.location.startLine}\n  ${f.message}`)
-          .join('\n\n')}\n\ntenets: ${findings.length} finding(s)\n`;
+      : `${formatFindingsByFile(findings)}\ntenets: ${findings.length} finding(s), ${score} findings/KLOC\n`;
 
   if (skippedFiles.length === 0) {
     return body;
@@ -116,6 +115,30 @@ function formatTerminal({ findings, skippedFiles }: AnalysisResult): string {
   return `${body}tenets: ${skippedFiles.length} file(s) could not be analyzed: ${skippedFiles.join(', ')}\n`;
 }
 
-function formatJson(result: AnalysisResult): string {
-  return JSON.stringify(result, null, 2);
+function formatFindingsByFile(findings: Finding[]): string {
+  const files = groupFindingsByFile(findings);
+  return Object.entries(files)
+    .map(
+      ([file, fileFindings]) =>
+        `${file}:\n${fileFindings
+          .map((f) => `  [${f.severity}] ${f.ruleId} :${f.location.startLine}\n    ${f.message}`)
+          .join('\n')}`,
+    )
+    .join('\n\n');
+}
+
+function groupFindingsByFile(findings: Finding[]): Record<string, Finding[]> {
+  const files: Record<string, Finding[]> = {};
+  for (const finding of findings) {
+    (files[finding.location.file] ??= []).push(finding);
+  }
+  return files;
+}
+
+function formatJson({ findings, skippedFiles, score }: AnalysisResult): string {
+  return JSON.stringify({
+    summary: { totalFindings: findings.length, score },
+    files: groupFindingsByFile(findings),
+    skippedFiles,
+  });
 }

@@ -3,19 +3,26 @@ import path from 'node:path';
 import ignore, { type Ignore } from 'ignore';
 import {
   isArrowFunction,
+  isAwaitExpression,
   isBinaryExpression,
   isBlock,
   isCallExpression,
   isClassDeclaration,
+  isExportDeclaration,
   isFunctionDeclaration,
   isFunctionExpression,
   isIdentifier,
   isImportDeclaration,
+  isImportExpression,
   isMethodDeclaration,
+  isNamedExports,
   isNamedImports,
   isNewExpression,
   isNumericLiteral,
+  isObjectBindingPattern,
+  isParenthesizedExpression,
   isPropertyAccessExpression,
+  isReturnStatement,
   isStringLiteral,
   isVariableDeclaration,
   SyntaxKind,
@@ -24,16 +31,28 @@ import { API } from 'typescript/unstable/sync';
 import type {
   ArrowFunction,
   Block,
+  CallExpression,
   ClassDeclaration,
+  ExportDeclaration,
   FunctionDeclaration,
   FunctionExpression,
   ImportDeclaration,
   MethodDeclaration,
   Node,
+  PropertyAccessExpression,
   SourceFile,
   VariableDeclaration,
 } from 'typescript/unstable/ast';
-import type { CallFact, ClassFact, ExportFact, FrameworkRole, FunctionFact, ImportFact, Location } from '../types.js';
+import type {
+  CallFact,
+  ClassFact,
+  DynamicImportFact,
+  ExportFact,
+  FrameworkRole,
+  FunctionFact,
+  ImportFact,
+  Location,
+} from '../types.js';
 
 export interface ParsedFacts {
   functionFacts: FunctionFact[];
@@ -41,7 +60,9 @@ export interface ParsedFacts {
   callFacts: CallFact[];
   exportFacts: ExportFact[];
   importFacts: ImportFact[];
+  dynamicImportFacts: DynamicImportFact[];
   skippedFiles: string[];
+  totalLoc: number;
 }
 
 export function parseFacts(rootPath: string): ParsedFacts {
@@ -56,7 +77,9 @@ export function parseFiles(files: string[], rootPath: string): ParsedFacts {
     callFacts: [],
     exportFacts: [],
     importFacts: [],
+    dynamicImportFacts: [],
     skippedFiles: [],
+    totalLoc: 0,
   };
 
   const api = new API({ cwd: rootPath });
@@ -70,6 +93,7 @@ export function parseFiles(files: string[], rootPath: string): ParsedFacts {
         continue;
       }
       collectFileFacts(sourceFile, file, facts);
+      facts.totalLoc += sourceFile.getLineAndCharacterOfPosition(sourceFile.end).line;
     }
   } finally {
     api.close();
@@ -99,52 +123,89 @@ function collectNodeFacts(node: Node, sourceFile: SourceFile, file: string, fact
     collectImportDeclaration(node, sourceFile, file, facts);
     return;
   }
+  if (isExportDeclaration(node)) {
+    collectExportDeclaration(node, sourceFile, file, facts);
+    return;
+  }
   if (isVariableDeclaration(node)) {
     collectVariableDeclaration(node, sourceFile, file, facts);
     return;
   }
   if (isCallExpression(node)) {
-    collectCallExpression(node, sourceFile, file, facts);
+    collectDynamicImportThenCall(node, sourceFile, file, facts);
+    return;
+  }
+  if (isPropertyAccessExpression(node)) {
+    collectAwaitedImportPropertyAccess(node, sourceFile, file, facts);
   }
 }
 
-function collectCallExpression(node: any, sourceFile: SourceFile, file: string, facts: ParsedFacts): void {
-  if (node.expression.kind === SyntaxKind.ImportKeyword && node.arguments?.length > 0) {
-    const firstArg = node.arguments[0];
-    if (isStringLiteral(firstArg)) {
-      const location = toLocation(node, sourceFile, file);
-      const importedNames: string[] = [];
+function collectAwaitedImportPropertyAccess(
+  node: PropertyAccessExpression,
+  sourceFile: SourceFile,
+  file: string,
+  facts: ParsedFacts,
+): void {
+  const unwrapped = isParenthesizedExpression(node.expression) ? node.expression.expression : node.expression;
+  if (!isAwaitExpression(unwrapped)) return;
+  const source = getDynamicImportSource(unwrapped.expression);
+  if (!source) return;
 
-      if (node.parent && isPropertyAccessExpression(node.parent) && node.parent.name.text === 'then') {
-        const thenCall = node.parent.parent;
-        if (thenCall && isCallExpression(thenCall) && thenCall.arguments?.length > 0) {
-          const callback = thenCall.arguments[0];
-          if ((isArrowFunction(callback) || isFunctionExpression(callback)) && callback.body) {
-            extractAccessedPropertyNames(callback.body, importedNames);
-          }
-        }
-      }
-
-      facts.importFacts.push({
-        id: `${file}:${location.startLine}:${location.startColumn}`,
-        file,
-        source: firstArg.text,
-        importedNames,
-        isTypeOnly: false,
-        location,
-      });
-    }
-  }
+  const location = toLocation(node, sourceFile, file);
+  facts.dynamicImportFacts.push({
+    id: `${file}:${location.startLine}:${location.startColumn}`,
+    file,
+    source,
+    accessedName: node.name.text,
+    location,
+  });
 }
 
-function extractAccessedPropertyNames(node: Node, names: string[]): void {
-  const visit = (current: Node): void => {
-    if (isPropertyAccessExpression(current) && current.name) {
-      names.push(current.name.text);
-    }
-    current.forEachChild(visit);
-  };
-  node.forEachChild(visit);
+function collectDynamicImportThenCall(
+  node: CallExpression,
+  sourceFile: SourceFile,
+  file: string,
+  facts: ParsedFacts,
+): void {
+  if (!isPropertyAccessExpression(node.expression)) return;
+  if (node.expression.name.text !== 'then') return;
+  const source = getDynamicImportSource(node.expression.expression);
+  if (!source) return;
+
+  const callback = node.arguments[0];
+  if (!callback || !isArrowFunction(callback)) return;
+  const [param] = callback.parameters;
+  if (!param || !isIdentifier(param.name)) return;
+  const paramName = param.name.text;
+
+  const body = callback.body;
+  const accessed = isBlock(body) ? findReturnedPropertyAccess(body, paramName) : findPropertyAccessOnParam(body, paramName);
+  if (!accessed) return;
+
+  const location = toLocation(node, sourceFile, file);
+  facts.dynamicImportFacts.push({
+    id: `${file}:${location.startLine}:${location.startColumn}`,
+    file,
+    source,
+    accessedName: accessed,
+    location,
+  });
+}
+
+function findPropertyAccessOnParam(node: Node, paramName: string): string | undefined {
+  if (isPropertyAccessExpression(node) && isIdentifier(node.expression) && node.expression.text === paramName) {
+    return node.name.text;
+  }
+  return undefined;
+}
+
+function findReturnedPropertyAccess(block: Block, paramName: string): string | undefined {
+  for (const statement of block.statements) {
+    if (!isReturnStatement(statement) || !statement.expression) continue;
+    const accessed = findPropertyAccessOnParam(statement.expression, paramName);
+    if (accessed) return accessed;
+  }
+  return undefined;
 }
 
 function collectFunctionDeclaration(
@@ -202,17 +263,71 @@ function collectImportDeclaration(
   if (importFact) facts.importFacts.push(importFact);
 }
 
+function collectExportDeclaration(
+  node: ExportDeclaration,
+  sourceFile: SourceFile,
+  file: string,
+  facts: ParsedFacts,
+): void {
+  if (!node.moduleSpecifier || !isStringLiteral(node.moduleSpecifier)) return;
+  if (!node.exportClause || !isNamedExports(node.exportClause)) return;
+
+  const source = node.moduleSpecifier.text;
+  for (const element of node.exportClause.elements) {
+    const location = toLocation(element, sourceFile, file);
+    facts.exportFacts.push({
+      id: `${file}:${location.startLine}:${location.startColumn}`,
+      file,
+      name: element.name.text,
+      kind: 'const',
+      location,
+      source,
+    });
+  }
+}
+
 function collectVariableDeclaration(
   node: VariableDeclaration,
   sourceFile: SourceFile,
   file: string,
   facts: ParsedFacts,
 ): void {
-  if (!isIdentifier(node.name) || !node.initializer || !isBlockBodiedFunctionExpression(node.initializer)) {
+  if (isIdentifier(node.name) && node.initializer && isBlockBodiedFunctionExpression(node.initializer)) {
+    const role = detectFrameworkRole(node, sourceFile, file);
+    facts.functionFacts.push(toFunctionFact(node.initializer, sourceFile, file, node.name.text, role));
     return;
   }
-  const role = detectFrameworkRole(node, sourceFile, file);
-  facts.functionFacts.push(toFunctionFact(node.initializer, sourceFile, file, node.name.text, role));
+  collectAwaitedImportBinding(node, sourceFile, file, facts);
+}
+
+function collectAwaitedImportBinding(
+  node: VariableDeclaration,
+  sourceFile: SourceFile,
+  file: string,
+  facts: ParsedFacts,
+): void {
+  if (!isObjectBindingPattern(node.name) || !node.initializer || !isAwaitExpression(node.initializer)) return;
+  const source = getDynamicImportSource(node.initializer.expression);
+  if (!source) return;
+
+  const location = toLocation(node, sourceFile, file);
+  for (const element of node.name.elements) {
+    if (!element.name || !isIdentifier(element.name)) continue;
+    const accessedName = element.propertyName && isIdentifier(element.propertyName) ? element.propertyName.text : element.name.text;
+    facts.dynamicImportFacts.push({
+      id: `${file}:${location.startLine}:${location.startColumn}:${accessedName}`,
+      file,
+      source,
+      accessedName,
+      location,
+    });
+  }
+}
+
+function getDynamicImportSource(node: Node): string | undefined {
+  if (!isCallExpression(node) || !isImportExpression(node.expression)) return undefined;
+  const sourceArg = node.arguments[0];
+  return sourceArg && isStringLiteral(sourceArg) ? sourceArg.text : undefined;
 }
 
 function hasExportModifier(node: FunctionDeclaration | ClassDeclaration): boolean {
