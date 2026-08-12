@@ -1,5 +1,16 @@
 import type { DynamicImportFact, ExportFact, Finding, ImportFact } from '../types.js';
 
+const FRAMEWORK_ENTRY_ROLES = new Set([
+  'entry-point',
+  'route-handler',
+  'controller',
+  'resolver',
+  'gateway',
+  'middleware',
+  'component',
+  'module',
+]);
+
 export function yagniUnusedExport(
   exportFacts: ExportFact[],
   importFacts: ImportFact[],
@@ -14,7 +25,7 @@ export function yagniUnusedExport(
     .filter(
       (fact) =>
         fact.kind !== 'default' &&
-        fact.frameworkRole?.role !== 'entry-point' &&
+        (!fact.frameworkRole || !FRAMEWORK_ENTRY_ROLES.has(fact.frameworkRole.role)) &&
         !importedNames.has(fact.name),
     )
     .map((fact) => ({
@@ -26,3 +37,4 @@ export function yagniUnusedExport(
       location: fact.location,
     }));
 }
+

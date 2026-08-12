@@ -292,13 +292,30 @@ function collectVariableDeclaration(
   file: string,
   facts: ParsedFacts,
 ): void {
+  const role = detectFrameworkRole(node, sourceFile, file);
   if (isIdentifier(node.name) && node.initializer && isBlockBodiedFunctionExpression(node.initializer)) {
-    const role = detectFrameworkRole(node, sourceFile, file);
     facts.functionFacts.push(toFunctionFact(node.initializer, sourceFile, file, node.name.text, role));
-    return;
+  }
+  if (isIdentifier(node.name) && isVariableDeclarationExported(node)) {
+    const location = toLocation(node, sourceFile, file);
+    facts.exportFacts.push({
+      id: `${file}:${location.startLine}:${location.startColumn}`,
+      file,
+      name: node.name.text,
+      kind: 'const',
+      frameworkRole: role,
+      location,
+    });
   }
   collectAwaitedImportBinding(node, sourceFile, file, facts);
 }
+
+function isVariableDeclarationExported(node: VariableDeclaration): boolean {
+  const statement = node.parent?.parent;
+  if (!statement) return false;
+  return (statement as any).modifiers?.some((m: any) => m.kind === SyntaxKind.ExportKeyword) ?? false;
+}
+
 
 function collectAwaitedImportBinding(
   node: VariableDeclaration,
@@ -468,14 +485,28 @@ function detectFrameworkRole(node: Node, sourceFile: SourceFile, file: string): 
   }
 
   // Next.js & Hono checks
-  if (normFile.includes('/app/') && (fileName === 'page.tsx' || fileName === 'layout.tsx')) {
+  const isNextAppDir = normFile.includes('/app/') || normFile.startsWith('app/');
+  if (isNextAppDir) {
+    if (/^(page|layout|template|loading|error|global-error|not-found|default)\.(tsx|ts|jsx|js)$/i.test(fileName)) {
+      return { framework: 'nextjs', role: 'component', confidence: 'high' };
+    }
+    if (/^route\.(tsx|ts|jsx|js)$/i.test(fileName)) {
+      return { framework: 'nextjs', role: 'route-handler', confidence: 'high' };
+    }
+  }
+
+  if (normFile.includes('/pages/api/') || normFile.startsWith('pages/api/')) {
+    return { framework: 'nextjs', role: 'route-handler', confidence: 'high' };
+  }
+  if (normFile.includes('/pages/') || normFile.startsWith('pages/')) {
     return { framework: 'nextjs', role: 'component', confidence: 'high' };
   }
-  if (normFile.includes('/app/') && (fileName === 'route.ts' || fileName === 'route.tsx')) {
-    return { framework: 'nextjs', role: 'route-handler', confidence: 'high' };
+
+  if (/^middleware\.(tsx|ts|jsx|js)$/i.test(fileName)) {
+    return { framework: 'nextjs', role: 'middleware', confidence: 'high' };
   }
-  if (normFile.includes('/pages/api/')) {
-    return { framework: 'nextjs', role: 'route-handler', confidence: 'high' };
+  if (/^instrumentation\.(ts|js)$/i.test(fileName)) {
+    return { framework: 'nextjs', role: 'entry-point', confidence: 'high' };
   }
 
   return undefined;
