@@ -43,7 +43,16 @@ import type {
   SourceFile,
   VariableDeclaration,
 } from 'typescript/unstable/ast';
-import type { CallFact, ClassFact, DynamicImportFact, ExportFact, FunctionFact, ImportFact, Location } from '../types.js';
+import type {
+  CallFact,
+  ClassFact,
+  DynamicImportFact,
+  ExportFact,
+  FrameworkRole,
+  FunctionFact,
+  ImportFact,
+  Location,
+} from '../types.js';
 
 export interface ParsedFacts {
   functionFacts: FunctionFact[];
@@ -205,9 +214,10 @@ function collectFunctionDeclaration(
   file: string,
   facts: ParsedFacts,
 ): void {
-  facts.functionFacts.push(toFunctionFact(node, sourceFile, file));
+  const role = detectFrameworkRole(node, sourceFile, file);
+  facts.functionFacts.push(toFunctionFact(node, sourceFile, file, undefined, role));
   if (hasExportModifier(node)) {
-    facts.exportFacts.push(toExportFact(node, sourceFile, file, 'function'));
+    facts.exportFacts.push(toExportFact(node, sourceFile, file, 'function', role));
   }
 }
 
@@ -217,10 +227,11 @@ function collectClassDeclaration(
   file: string,
   facts: ParsedFacts,
 ): void {
+  const role = detectFrameworkRole(node, sourceFile, file);
   const methodIds = collectClassMethods(node, sourceFile, file, facts);
-  facts.classFacts.push(toClassFact(node, sourceFile, file, methodIds, extractImplementsInterfaces(node, sourceFile)));
+  facts.classFacts.push(toClassFact(node, sourceFile, file, methodIds, extractImplementsInterfaces(node, sourceFile), role));
   if (hasExportModifier(node)) {
-    facts.exportFacts.push(toExportFact(node, sourceFile, file, 'class'));
+    facts.exportFacts.push(toExportFact(node, sourceFile, file, 'class', role));
   }
 }
 
@@ -233,7 +244,8 @@ function collectClassMethods(
   const methodIds: string[] = [];
   for (const member of node.members) {
     if (!isMethodDeclaration(member) || !member.body) continue;
-    const methodFact = toFunctionFact(member, sourceFile, file);
+    const role = detectFrameworkRole(member, sourceFile, file);
+    const methodFact = toFunctionFact(member, sourceFile, file, undefined, role);
     facts.functionFacts.push(methodFact);
     methodIds.push(methodFact.id);
     facts.callFacts.push(...collectNewExpressionCalls(member.body, sourceFile, file));
@@ -281,7 +293,8 @@ function collectVariableDeclaration(
   facts: ParsedFacts,
 ): void {
   if (isIdentifier(node.name) && node.initializer && isBlockBodiedFunctionExpression(node.initializer)) {
-    facts.functionFacts.push(toFunctionFact(node.initializer, sourceFile, file, node.name.text));
+    const role = detectFrameworkRole(node, sourceFile, file);
+    facts.functionFacts.push(toFunctionFact(node.initializer, sourceFile, file, node.name.text, role));
     return;
   }
   collectAwaitedImportBinding(node, sourceFile, file, facts);
@@ -325,11 +338,155 @@ function hasDefaultModifier(node: FunctionDeclaration | ClassDeclaration): boole
   return node.modifiers?.some((modifier) => modifier.kind === SyntaxKind.DefaultKeyword) ?? false;
 }
 
+function getDecorators(node: Node): Node[] {
+  const decorators: Node[] = [];
+  const modifiers = (node as any).modifiers;
+  if (modifiers) {
+    for (const m of modifiers) {
+      if (m.kind === SyntaxKind.Decorator) {
+        decorators.push(m);
+      }
+    }
+  }
+  return decorators;
+}
+
+function getDecoratorName(decoratorNode: Node, sourceFile: SourceFile): string | undefined {
+  const expr = (decoratorNode as any).expression;
+  if (!expr) return undefined;
+  if (isIdentifier(expr)) {
+    return expr.text;
+  }
+  if (isCallExpression(expr) && expr.expression && isIdentifier(expr.expression)) {
+    return expr.expression.text;
+  }
+  return undefined;
+}
+
+function detectFrameworkRole(node: Node, sourceFile: SourceFile, file: string): FrameworkRole | undefined {
+  const normFile = file.replaceAll('\\', '/');
+  const fileName = path.basename(normFile).toLowerCase();
+
+  const decorators = getDecorators(node);
+  const isNestImport = sourceFile.text.includes('@nestjs/');
+  const isAngularImport = sourceFile.text.includes('@angular/');
+
+  for (const dec of decorators) {
+    const decName = getDecoratorName(dec, sourceFile);
+    if (!decName) continue;
+
+    if (decName === 'Component') {
+      return { framework: 'angular', role: 'component', confidence: 'high' };
+    }
+    if (decName === 'Directive') {
+      return { framework: 'angular', role: 'directive', confidence: 'high' };
+    }
+    if (decName === 'Pipe') {
+      return { framework: 'angular', role: 'pipe', confidence: 'high' };
+    }
+    if (decName === 'NgModule') {
+      return { framework: 'angular', role: 'module', confidence: 'high' };
+    }
+    if (decName === 'Controller') {
+      return { framework: 'nestjs', role: 'controller', confidence: 'high' };
+    }
+    if (decName === 'Module') {
+      return { framework: 'nestjs', role: 'module', confidence: 'high' };
+    }
+    if (decName === 'Resolver') {
+      return { framework: 'nestjs', role: 'resolver', confidence: 'high' };
+    }
+    if (decName === 'WebSocketGateway' || decName === 'Gateway') {
+      return { framework: 'nestjs', role: 'gateway', confidence: 'high' };
+    }
+    if (decName === 'Catch') {
+      return { framework: 'nestjs', role: 'filter', confidence: 'high' };
+    }
+    if (decName === 'Injectable') {
+      const framework = isNestImport ? 'nestjs' : isAngularImport ? 'angular' : 'nestjs';
+      return { framework, role: 'service', confidence: 'high' };
+    }
+
+    if (['Get', 'Post', 'Put', 'Delete', 'Patch', 'Options', 'Head', 'All'].includes(decName)) {
+      return { framework: 'nestjs', role: 'route-handler', confidence: 'high' };
+    }
+    if (decName === 'SubscribeMessage') {
+      return { framework: 'nestjs', role: 'gateway', confidence: 'high' };
+    }
+    if (['Query', 'Mutation', 'Subscription'].includes(decName)) {
+      return { framework: 'nestjs', role: 'resolver', confidence: 'high' };
+    }
+  }
+
+  // Entry point check
+  if (
+    fileName === 'main.ts' ||
+    fileName === 'main.server.ts' ||
+    fileName === 'app.config.ts' ||
+    fileName === 'app.routes.ts' ||
+    fileName === 'server.ts' ||
+    sourceFile.text.includes('bootstrapApplication(') ||
+    sourceFile.text.includes('NestFactory.create(')
+  ) {
+    const framework = isNestImport ? 'nestjs' : isAngularImport ? 'angular' : 'angular';
+    return { framework, role: 'entry-point', confidence: 'high' };
+  }
+
+  // File path naming fallback
+  if (normFile.endsWith('.component.ts') || normFile.endsWith('.component.tsx')) {
+    return { framework: 'angular', role: 'component', confidence: 'medium' };
+  }
+  if (normFile.endsWith('.directive.ts')) {
+    return { framework: 'angular', role: 'directive', confidence: 'medium' };
+  }
+  if (normFile.endsWith('.pipe.ts')) {
+    return { framework: 'angular', role: 'pipe', confidence: 'medium' };
+  }
+  if (normFile.endsWith('.controller.ts')) {
+    return { framework: 'nestjs', role: 'controller', confidence: 'medium' };
+  }
+  if (normFile.endsWith('.resolver.ts')) {
+    return { framework: 'nestjs', role: 'resolver', confidence: 'medium' };
+  }
+  if (normFile.endsWith('.gateway.ts')) {
+    return { framework: 'nestjs', role: 'gateway', confidence: 'medium' };
+  }
+  if (normFile.endsWith('.guard.ts')) {
+    return { framework: isNestImport ? 'nestjs' : 'angular', role: 'guard', confidence: 'medium' };
+  }
+  if (normFile.endsWith('.interceptor.ts')) {
+    return { framework: isNestImport ? 'nestjs' : 'angular', role: 'interceptor', confidence: 'medium' };
+  }
+  if (normFile.endsWith('.filter.ts')) {
+    return { framework: 'nestjs', role: 'filter', confidence: 'medium' };
+  }
+  if (normFile.endsWith('.service.ts')) {
+    return { framework: isNestImport ? 'nestjs' : 'angular', role: 'service', confidence: 'medium' };
+  }
+  if (normFile.endsWith('.module.ts')) {
+    return { framework: isNestImport ? 'nestjs' : 'angular', role: 'module', confidence: 'medium' };
+  }
+
+  // Next.js & Hono checks
+  if (normFile.includes('/app/') && (fileName === 'page.tsx' || fileName === 'layout.tsx')) {
+    return { framework: 'nextjs', role: 'component', confidence: 'high' };
+  }
+  if (normFile.includes('/app/') && (fileName === 'route.ts' || fileName === 'route.tsx')) {
+    return { framework: 'nextjs', role: 'route-handler', confidence: 'high' };
+  }
+  if (normFile.includes('/pages/api/')) {
+    return { framework: 'nextjs', role: 'route-handler', confidence: 'high' };
+  }
+
+  return undefined;
+}
+
 function toExportFact(
   node: FunctionDeclaration | ClassDeclaration,
   sourceFile: SourceFile,
   file: string,
   kind: ExportFact['kind'],
+  frameworkRole?: FrameworkRole,
 ): ExportFact {
   const location = toLocation(node, sourceFile, file);
 
@@ -338,6 +495,7 @@ function toExportFact(
     file,
     name: node.name?.text ?? '<anonymous>',
     kind: hasDefaultModifier(node) ? 'default' : kind,
+    frameworkRole,
     location,
   };
 }
@@ -400,6 +558,7 @@ function toFunctionFact(
   sourceFile: SourceFile,
   file: string,
   nameOverride?: string,
+  frameworkRole?: FrameworkRole,
 ): FunctionFact {
   const location = toLocation(node, sourceFile, file);
   const name = nameOverride ?? resolveDeclaredName(node, sourceFile);
@@ -414,6 +573,7 @@ function toFunctionFact(
     cyclomaticComplexity: computeCyclomaticComplexity(body),
     statementCount: body.statements.length,
     normalizedBodySignature: computeNormalizedBodySignature(body),
+    frameworkRole,
     location,
   };
 }
@@ -431,6 +591,7 @@ function toClassFact(
   file: string,
   methodIds: string[],
   implementsInterfaces: string[],
+  frameworkRole?: FrameworkRole,
 ): ClassFact {
   const location = toLocation(node, sourceFile, file);
 
@@ -440,6 +601,7 @@ function toClassFact(
     name: node.name?.text ?? '<anonymous>',
     methodIds,
     implementsInterfaces,
+    frameworkRole,
     location,
   };
 }

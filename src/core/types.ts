@@ -1,3 +1,23 @@
+export interface FrameworkRole {
+  framework: 'angular' | 'nestjs' | 'hono' | 'nextjs';
+  role:
+    | 'component'
+    | 'directive'
+    | 'pipe'
+    | 'service'
+    | 'module'
+    | 'controller'
+    | 'resolver'
+    | 'gateway'
+    | 'guard'
+    | 'interceptor'
+    | 'filter'
+    | 'route-handler'
+    | 'middleware'
+    | 'entry-point';
+  confidence: 'high' | 'medium' | 'low';
+}
+
 export interface Location {
   file: string;
   startLine: number;
@@ -15,6 +35,7 @@ export interface FunctionFact {
   cyclomaticComplexity: number;
   statementCount: number;
   normalizedBodySignature: string;
+  frameworkRole?: FrameworkRole;
   location: Location;
 }
 
@@ -24,6 +45,7 @@ export interface ClassFact {
   name: string;
   methodIds: string[];
   implementsInterfaces: string[];
+  frameworkRole?: FrameworkRole;
   location: Location;
 }
 
@@ -41,6 +63,7 @@ export interface ExportFact {
   file: string;
   name: string;
   kind: 'function' | 'class' | 'const' | 'type' | 'default';
+  frameworkRole?: FrameworkRole;
   location: Location;
   source?: string;
 }
@@ -90,3 +113,4 @@ export interface AnalysisResult {
   skippedFiles: string[];
   score: number;
 }
+

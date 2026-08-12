@@ -1,6 +1,6 @@
 # @diego22rct/tenets
 
-Static analysis CLI that flags SOLID/DRY/KISS/YAGNI violations in TypeScript codebases. Built against a HonoJS + Next.js stack, but works on any `.ts`/`.tsx` project — it has no framework-specific rules yet, so unrecognized code is still analyzed with the generic rule set rather than skipped.
+Static analysis CLI that flags SOLID/DRY/KISS/YAGNI violations in TypeScript codebases. Built with native support for Angular, NestJS, HonoJS, and Next.js conventions — unrecognized code is still analyzed with the generic rule set rather than skipped.
 
 ## Usage
 
@@ -85,7 +85,7 @@ const result = await analyze({ path: './src' });
 ## Known limitations
 
 - **No config file support yet.** Thresholds and severities are fixed defaults.
-- **No framework-aware rules yet.** Files that a framework invokes by convention rather than by explicit import — e.g. Next.js's `middleware.ts` — will show up as `yagni/unused-export` even though they're real, used code.
+- **Framework-aware detection.** Recognizes Angular components/services/modules/entry points, NestJS controllers/services/modules/exceptions/entry points, Next.js page/route conventions, and Hono handlers. Unrecognized code falls back to generic rule analysis.
 - **Concurrent invocations on the same machine can stall.** The parsing engine spawns a native TypeScript compiler process per run; running multiple `tenets` invocations at once has been observed to cause severe IPC contention between them. A single invocation (the normal `npx` usage pattern) is unaffected.
 - **Built on TypeScript 7's `unstable/ast` API.** Microsoft has stated TypeScript 7.0's programmatic API is not yet stable and 7.1 will ship a different one — a future TypeScript upgrade may require adapter changes.
 

@@ -11,7 +11,12 @@ export function yagniUnusedExport(
   ]);
 
   return exportFacts
-    .filter((fact) => fact.kind !== 'default' && !importedNames.has(fact.name))
+    .filter(
+      (fact) =>
+        fact.kind !== 'default' &&
+        fact.frameworkRole?.role !== 'entry-point' &&
+        !importedNames.has(fact.name),
+    )
     .map((fact) => ({
       ruleId: 'yagni/unused-export',
       principle: 'YAGNI',
