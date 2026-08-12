@@ -287,4 +287,14 @@ describe('analyze', () => {
     const unusedFiles = unusedExportFindings.map((f) => path.basename(f.location.file));
     expect(unusedFiles).not.toContain('main.ts');
   });
+
+  it('analyzes Next.js applications, recognizing App Router route handlers (GET/POST), page components, and middleware as framework entry points', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'nextjs-support');
+
+    const result = await analyze({ path: target });
+
+    const unusedExportFindings = result.findings.filter((f) => f.ruleId === 'yagni/unused-export');
+    expect(unusedExportFindings).toEqual([]);
+  });
 });
+
