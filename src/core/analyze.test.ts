@@ -193,4 +193,32 @@ describe('analyze', () => {
     const findings = result.findings.filter((f) => f.ruleId === 'yagni/unused-export');
     expect(findings.map((f) => f.location.file)).toEqual([path.join(target, 'production.ts')]);
   });
+
+  it('analyzes Angular applications, ignoring RxJS/Form controls in direct-instantiation and recognizing entry points', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'angular-support');
+
+    const result = await analyze({ path: target });
+
+    const dipFindings = result.findings.filter((f) => f.ruleId === 'dip/direct-instantiation');
+    expect(dipFindings).toHaveLength(1);
+    expect(dipFindings[0]?.message).toContain('HeavyCalculator');
+
+    const unusedExportFindings = result.findings.filter((f) => f.ruleId === 'yagni/unused-export');
+    const unusedFiles = unusedExportFindings.map((f) => path.basename(f.location.file));
+    expect(unusedFiles).not.toContain('main.ts');
+  });
+
+  it('analyzes NestJS applications, ignoring NestJS exceptions in direct-instantiation and recognizing entry points', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'nestjs-support');
+
+    const result = await analyze({ path: target });
+
+    const dipFindings = result.findings.filter((f) => f.ruleId === 'dip/direct-instantiation');
+    expect(dipFindings).toHaveLength(1);
+    expect(dipFindings[0]?.message).toContain('ExternalClient');
+
+    const unusedExportFindings = result.findings.filter((f) => f.ruleId === 'yagni/unused-export');
+    const unusedFiles = unusedExportFindings.map((f) => path.basename(f.location.file));
+    expect(unusedFiles).not.toContain('main.ts');
+  });
 });

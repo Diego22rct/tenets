@@ -22,4 +22,54 @@ describe('parseFiles', () => {
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  it('assigns frameworkRole to Angular component and NestJS controller classes', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-framework-'));
+    const angularFile = path.join(dir, 'user.component.ts');
+    const nestFile = path.join(dir, 'user.controller.ts');
+
+    fs.writeFileSync(
+      angularFile,
+      `import { Component } from '@angular/core';
+@Component({ selector: 'app-user' })
+export class UserComponent {}
+`,
+    );
+
+    fs.writeFileSync(
+      nestFile,
+      `import { Controller, Get } from '@nestjs/common';
+@Controller('users')
+export class UserController {
+  @Get()
+  getUsers() {}
+}
+`,
+    );
+
+    const facts = parseFiles([angularFile, nestFile], dir);
+
+    const angularClass = facts.classFacts.find((c) => c.name === 'UserComponent');
+    expect(angularClass?.frameworkRole).toEqual({
+      framework: 'angular',
+      role: 'component',
+      confidence: 'high',
+    });
+
+    const nestClass = facts.classFacts.find((c) => c.name === 'UserController');
+    expect(nestClass?.frameworkRole).toEqual({
+      framework: 'nestjs',
+      role: 'controller',
+      confidence: 'high',
+    });
+
+    const nestMethod = facts.functionFacts.find((f) => f.name === 'getUsers');
+    expect(nestMethod?.frameworkRole).toEqual({
+      framework: 'nestjs',
+      role: 'route-handler',
+      confidence: 'high',
+    });
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });
