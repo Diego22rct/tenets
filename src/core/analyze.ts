@@ -1,5 +1,6 @@
 import { parseFacts } from './adapter/typescript-adapter.js';
 import { computeScore } from './score.js';
+import { detectProjectFrameworks } from './detect-framework.js';
 import { dipDirectInstantiation } from './rules/dip-direct-instantiation.js';
 import { dryExactDuplicate } from './rules/dry-exact-duplicate.js';
 import { kissCyclomaticComplexity } from './rules/kiss-cyclomatic-complexity.js';
@@ -11,8 +12,9 @@ import { yagniUnusedExport } from './rules/yagni-unused-export.js';
 import type { AnalysisResult, AnalyzeOptions } from './types.js';
 
 export async function analyze(options: AnalyzeOptions): Promise<AnalysisResult> {
+  const facts = parseFacts(options.path);
   const { functionFacts, classFacts, callFacts, exportFacts, importFacts, dynamicImportFacts, skippedFiles, totalLoc } =
-    parseFacts(options.path);
+    facts;
   const findings = [
     ...srpFunctionLength(functionFacts),
     ...kissNestingDepth(functionFacts),
@@ -23,5 +25,13 @@ export async function analyze(options: AnalyzeOptions): Promise<AnalysisResult> 
     ...yagniUnusedExport(exportFacts, importFacts, dynamicImportFacts),
     ...yagniSingleImplInterface(classFacts, importFacts, exportFacts),
   ];
-  return { findings, skippedFiles, score: computeScore(findings, totalLoc) };
+  const frameworkDetection = detectProjectFrameworks(options.path, facts);
+  return {
+    findings,
+    skippedFiles,
+    score: computeScore(findings, totalLoc),
+    framework: frameworkDetection.primary,
+    frameworks: frameworkDetection.frameworks,
+  };
 }
+

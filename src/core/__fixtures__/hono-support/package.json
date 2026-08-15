@@ -1,0 +1,8 @@
+{
+  "name": "sample-hono-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "hono": "^4.0.0",
+    "@hono/zod-openapi": "^0.18.0"
+  }
+}

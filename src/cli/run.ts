@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import pc from 'picocolors';
 import { analyze } from '../core/analyze.js';
+import { FRAMEWORK_NAMES } from '../core/detect-framework.js';
 import type { AnalysisResult, Finding } from '../core/types.js';
 
 export interface CliResult {
@@ -34,6 +35,8 @@ Example:
 `;
 
 const AGENT_RULE = `After finishing a coding task, or before committing, run \`npx @diego22rct/tenets [path]\` and alert the user to any findings. Findings are tiered by severity (\`info\` < \`warning\` < \`error\`); an exit code of \`1\` means violations met the \`--fail-on\` threshold (default: \`warning\`) and should be surfaced prominently, not silently ignored.
+
+If you determine that a reported finding is a false positive (for example, standard framework idiom, valid architectural pattern, or incorrect rule deduction), do not write unnatural code workarounds. Instead, report or create a GitHub Issue on the tenets repository (https://github.com/Diego22rct/tenets/issues) with the rule ID, detected framework, code snippet, and explanation of why it is a false positive.
 `;
 
 export async function runCli(argv: string[]): Promise<CliResult> {
@@ -75,7 +78,7 @@ function writeAgentRule(filePath: string): void {
     return;
   }
   const existing = fs.readFileSync(filePath, 'utf8');
-  if (existing.includes(AGENT_RULE)) return;
+  if (existing.includes('npx @diego22rct/tenets')) return;
   fs.appendFileSync(filePath, `\n${AGENT_RULE}`);
 }
 
@@ -118,12 +121,25 @@ function formatScoreGauge(score: number, colors: ReturnType<typeof pc.createColo
   return color(bar);
 }
 
-function formatTerminal({ findings, skippedFiles, score }: AnalysisResult): string {
+function formatFrameworkLine(
+  framework: AnalysisResult['framework'],
+  frameworks: AnalysisResult['frameworks'],
+): string {
+  if (framework && framework !== 'unspecialized') {
+    const list = frameworks && frameworks.length > 0 ? frameworks : [framework];
+    const names = list.map((f) => FRAMEWORK_NAMES[f] ?? f).join(', ');
+    return `tenets: framework: ${names} (specialized rules applied)\n`;
+  }
+  return 'tenets: framework: not specialized (generic rules applied)\n';
+}
+
+function formatTerminal({ findings, skippedFiles, score, framework, frameworks }: AnalysisResult): string {
   const colors = pc.createColors(shouldUseColor());
+  const frameworkLine = formatFrameworkLine(framework, frameworks);
   const body =
     findings.length === 0
-      ? 'tenets: no violations found\n'
-      : `${formatFindingsByFile(findings, colors)}\ntenets: ${findings.length} finding(s), ${score} findings/KLOC ${formatScoreGauge(score, colors)}\n`;
+      ? `tenets: no violations found\n${frameworkLine}`
+      : `${formatFindingsByFile(findings, colors)}\ntenets: ${findings.length} finding(s), ${score} findings/KLOC ${formatScoreGauge(score, colors)}\n${frameworkLine}`;
 
   if (skippedFiles.length === 0) {
     return body;
@@ -156,10 +172,15 @@ function groupFindingsByFile(findings: Finding[]): Record<string, Finding[]> {
   return files;
 }
 
-function formatJson({ findings, skippedFiles, score }: AnalysisResult): string {
+function formatJson({ findings, skippedFiles, score, framework, frameworks }: AnalysisResult): string {
+  const detectedFramework = framework ?? 'unspecialized';
+  const detectedFrameworks = frameworks ?? (framework && framework !== 'unspecialized' ? [framework] : []);
   return JSON.stringify({
-    summary: { totalFindings: findings.length, score },
+    summary: { totalFindings: findings.length, score, framework: detectedFramework },
+    framework: detectedFramework,
+    frameworks: detectedFrameworks,
     files: groupFindingsByFile(findings),
     skippedFiles,
   });
 }
+

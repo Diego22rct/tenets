@@ -1,5 +1,7 @@
+export type Framework = 'angular' | 'nestjs' | 'hono' | 'nextjs';
+
 export interface FrameworkRole {
-  framework: 'angular' | 'nestjs' | 'hono' | 'nextjs';
+  framework: Framework;
   role:
     | 'component'
     | 'directive'
@@ -112,5 +114,7 @@ export interface AnalysisResult {
   findings: Finding[];
   skippedFiles: string[];
   score: number;
+  framework?: Framework | 'unspecialized';
+  frameworks?: Framework[];
 }
 

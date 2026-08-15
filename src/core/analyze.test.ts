@@ -295,6 +295,50 @@ describe('analyze', () => {
 
     const unusedExportFindings = result.findings.filter((f) => f.ruleId === 'yagni/unused-export');
     expect(unusedExportFindings).toEqual([]);
+    expect(result.framework).toBe('nextjs');
+  });
+
+  it('analyzes Hono applications, recognizing entry points, modular sub-routers, createMiddleware, createHandlers, and OpenAPI routes without false findings', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'hono-support');
+
+    const result = await analyze({ path: target });
+
+    // No false DIP violations on HTTPException or Headers
+    const dipFindings = result.findings.filter((f) => f.ruleId === 'dip/direct-instantiation');
+    expect(dipFindings).toEqual([]);
+
+    // No false YAGNI unused-export violations on Hono sub-routers, middleware, or entry points
+    const unusedExportFindings = result.findings.filter((f) => f.ruleId === 'yagni/unused-export');
+    expect(unusedExportFindings).toEqual([]);
+
+    // Framework is accurately detected as Hono
+    expect(result.framework).toBe('hono');
+    expect(result.frameworks).toContain('hono');
+  });
+
+  it('detects Angular as the primary framework for Angular projects', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'angular-support');
+
+    const result = await analyze({ path: target });
+
+    expect(result.framework).toBe('angular');
+  });
+
+  it('detects NestJS as the primary framework for NestJS projects', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'nestjs-support');
+
+    const result = await analyze({ path: target });
+
+    expect(result.framework).toBe('nestjs');
+  });
+
+  it('identifies unspecialized framework when analyzing generic TypeScript code', async () => {
+    const target = path.join(fixturesDir, '__fixtures__', 'generic-ts');
+
+    const result = await analyze({ path: target });
+
+    expect(result.framework).toBe('unspecialized');
+    expect(result.frameworks).toEqual([]);
   });
 });
 

@@ -203,4 +203,46 @@ describe('runCli', () => {
 
     expect(result.stdout).toContain('install');
   });
+
+  it('displays framework: Hono (specialized rules applied) in terminal output for Hono projects', async () => {
+    const target = path.join(coreFixturesDir, 'hono-support');
+
+    const result = await runCli([target]);
+
+    expect(result.stdout).toContain('tenets: framework: Hono (specialized rules applied)');
+  });
+
+  it('displays framework: not specialized (generic rules applied) in terminal output for unspecialized projects', async () => {
+    const target = path.join(coreFixturesDir, 'generic-ts');
+
+    const result = await runCli([target]);
+
+    expect(result.stdout).toContain('tenets: framework: not specialized (generic rules applied)');
+  });
+
+  it('includes framework in JSON output', async () => {
+    const target = path.join(coreFixturesDir, 'hono-support');
+
+    const result = await runCli([target, '--format', 'json']);
+
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.framework).toBe('hono');
+    expect(parsed.summary.framework).toBe('hono');
+  });
+
+  it('includes false positive reporting guidance in AGENTS.md and CLAUDE.md during install', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-install-fp-'));
+
+    const result = await runCli(['install', dir]);
+
+    expect(result.exitCode).toBe(0);
+    const agentsContent = fs.readFileSync(path.join(dir, 'AGENTS.md'), 'utf8');
+    const claudeContent = fs.readFileSync(path.join(dir, 'CLAUDE.md'), 'utf8');
+    expect(agentsContent).toContain('false positive');
+    expect(agentsContent).toContain('https://github.com/Diego22rct/tenets/issues');
+    expect(claudeContent).toContain('false positive');
+    expect(claudeContent).toContain('https://github.com/Diego22rct/tenets/issues');
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });

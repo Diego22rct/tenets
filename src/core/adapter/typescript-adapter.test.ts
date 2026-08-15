@@ -72,4 +72,57 @@ export class UserController {
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  it('assigns frameworkRole to Hono router, middleware, and entry points', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-hono-'));
+    const routeFile = path.join(dir, 'books.ts');
+    const mwFile = path.join(dir, 'auth.ts');
+    const indexFile = path.join(dir, 'index.ts');
+
+    fs.writeFileSync(
+      routeFile,
+      `import { Hono } from 'hono';
+export const booksApp = new Hono().get('/', (c: any) => c.text('ok'));
+`,
+    );
+
+    fs.writeFileSync(
+      mwFile,
+      `import { createMiddleware } from 'hono/factory';
+export const authMiddleware = createMiddleware(async (c: any, next: any) => { await next(); });
+`,
+    );
+
+    fs.writeFileSync(
+      indexFile,
+      `import { Hono } from 'hono';
+const app = new Hono();
+export default app;
+`,
+    );
+
+    const facts = parseFiles([routeFile, mwFile, indexFile], dir);
+
+    const booksExport = facts.exportFacts.find((e) => e.name === 'booksApp');
+    expect(booksExport?.frameworkRole).toEqual({
+      framework: 'hono',
+      role: 'route-handler',
+      confidence: 'high',
+    });
+
+    const mwExport = facts.exportFacts.find((e) => e.name === 'authMiddleware');
+    expect(mwExport?.frameworkRole).toEqual({
+      framework: 'hono',
+      role: 'middleware',
+      confidence: 'high',
+    });
+
+    const indexExport = facts.exportFacts.find((e) => e.file === indexFile);
+    // index.ts is detected as entry point for Hono
+    if (indexExport) {
+      expect(indexExport.frameworkRole?.framework).toBe('hono');
+    }
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });

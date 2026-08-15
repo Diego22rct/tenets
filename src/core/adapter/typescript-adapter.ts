@@ -380,6 +380,74 @@ function getDecoratorName(decoratorNode: Node, sourceFile: SourceFile): string |
   return undefined;
 }
 
+function isHonoRouterInit(node: Node, sourceFile: SourceFile): boolean {
+  let curr: Node = node;
+  while (true) {
+    if (isParenthesizedExpression(curr)) {
+      curr = curr.expression;
+      continue;
+    }
+    if (isNewExpression(curr)) {
+      const callee = isIdentifier(curr.expression) ? curr.expression.text : curr.expression.getText(sourceFile);
+      if (callee === 'Hono' || callee === 'OpenAPIHono') return true;
+      break;
+    }
+    if (isCallExpression(curr)) {
+      if (isPropertyAccessExpression(curr.expression)) {
+        const methodName = curr.expression.name.text;
+        if (
+          [
+            'get',
+            'post',
+            'put',
+            'delete',
+            'patch',
+            'all',
+            'on',
+            'use',
+            'route',
+            'basePath',
+            'openapi',
+            'doc',
+            'swaggerUI',
+          ].includes(methodName)
+        ) {
+          curr = curr.expression.expression;
+          continue;
+        }
+        if (methodName === 'createApp' || methodName === 'createHandlers') {
+          return true;
+        }
+      } else if (isIdentifier(curr.expression)) {
+        const fnName = curr.expression.text;
+        if (fnName === 'createApp' || fnName === 'createHandlers' || fnName === 'createRoute') {
+          return true;
+        }
+      }
+      curr = curr.expression;
+      continue;
+    }
+    break;
+  }
+  return false;
+}
+
+function isHonoMiddlewareInit(node: Node): boolean {
+  let curr: Node = node;
+  while (isParenthesizedExpression(curr)) {
+    curr = curr.expression;
+  }
+  if (isCallExpression(curr)) {
+    if (isIdentifier(curr.expression) && curr.expression.text === 'createMiddleware') {
+      return true;
+    }
+    if (isPropertyAccessExpression(curr.expression) && curr.expression.name.text === 'createMiddleware') {
+      return true;
+    }
+  }
+  return false;
+}
+
 function detectFrameworkRole(node: Node, sourceFile: SourceFile, file: string): FrameworkRole | undefined {
   const normFile = file.replaceAll('\\', '/');
   const fileName = path.basename(normFile).toLowerCase();
@@ -387,6 +455,25 @@ function detectFrameworkRole(node: Node, sourceFile: SourceFile, file: string): 
   const decorators = getDecorators(node);
   const isNestImport = sourceFile.text.includes('@nestjs/');
   const isAngularImport = sourceFile.text.includes('@angular/');
+  const isHonoImport =
+    sourceFile.text.includes("'hono'") ||
+    sourceFile.text.includes('"hono"') ||
+    sourceFile.text.includes('from "hono') ||
+    sourceFile.text.includes("from 'hono") ||
+    sourceFile.text.includes('@hono/');
+
+  // Hono variable / initializer checks
+  if (isVariableDeclaration(node) && node.initializer) {
+    if (isHonoMiddlewareInit(node.initializer)) {
+      return { framework: 'hono', role: 'middleware', confidence: 'high' };
+    }
+    if (isHonoRouterInit(node.initializer, sourceFile)) {
+      return { framework: 'hono', role: 'route-handler', confidence: 'high' };
+    }
+    if (isHonoImport && isIdentifier(node.name) && /^[A-Z]/.test(node.name.text) && (normFile.endsWith('.tsx') || sourceFile.text.includes('hono/jsx'))) {
+      return { framework: 'hono', role: 'component', confidence: 'high' };
+    }
+  }
 
   for (const dec of decorators) {
     const decName = getDecoratorName(dec, sourceFile);
@@ -435,18 +522,45 @@ function detectFrameworkRole(node: Node, sourceFile: SourceFile, file: string): 
     }
   }
 
-  // Entry point check
+  // Hono entry point check
+  if (isHonoImport) {
+    if (
+      fileName === 'index.ts' ||
+      fileName === 'server.ts' ||
+      fileName === 'app.ts' ||
+      fileName === 'worker.ts' ||
+      fileName === 'main.ts' ||
+      sourceFile.text.includes('export default app') ||
+      sourceFile.text.includes('export default {') ||
+      sourceFile.text.includes('serve(') ||
+      sourceFile.text.includes('Deno.serve(') ||
+      sourceFile.text.includes('handle(')
+    ) {
+      return { framework: 'hono', role: 'entry-point', confidence: 'high' };
+    }
+    if (normFile.endsWith('.routes.ts') || normFile.endsWith('.route.ts') || normFile.includes('/routes/') || normFile.includes('/handlers/')) {
+      return { framework: 'hono', role: 'route-handler', confidence: 'high' };
+    }
+    if (normFile.endsWith('.middleware.ts') || normFile.includes('/middleware/')) {
+      return { framework: 'hono', role: 'middleware', confidence: 'high' };
+    }
+  }
+
+  // Entry point check (Angular / NestJS)
   if (
     fileName === 'main.ts' ||
     fileName === 'main.server.ts' ||
     fileName === 'app.config.ts' ||
     fileName === 'app.routes.ts' ||
-    fileName === 'server.ts' ||
     sourceFile.text.includes('bootstrapApplication(') ||
     sourceFile.text.includes('NestFactory.create(')
   ) {
-    const framework = isNestImport ? 'nestjs' : isAngularImport ? 'angular' : 'angular';
-    return { framework, role: 'entry-point', confidence: 'high' };
+    if (isNestImport || sourceFile.text.includes('NestFactory.create(')) {
+      return { framework: 'nestjs', role: 'entry-point', confidence: 'high' };
+    }
+    if (isAngularImport || sourceFile.text.includes('bootstrapApplication(')) {
+      return { framework: 'angular', role: 'entry-point', confidence: 'high' };
+    }
   }
 
   // File path naming fallback
@@ -458,6 +572,9 @@ function detectFrameworkRole(node: Node, sourceFile: SourceFile, file: string): 
   }
   if (normFile.endsWith('.pipe.ts')) {
     return { framework: 'angular', role: 'pipe', confidence: 'medium' };
+  }
+  if (normFile.endsWith('.module.ts')) {
+    return { framework: isNestImport ? 'nestjs' : 'angular', role: 'module', confidence: 'medium' };
   }
   if (normFile.endsWith('.controller.ts')) {
     return { framework: 'nestjs', role: 'controller', confidence: 'medium' };
@@ -478,10 +595,10 @@ function detectFrameworkRole(node: Node, sourceFile: SourceFile, file: string): 
     return { framework: 'nestjs', role: 'filter', confidence: 'medium' };
   }
   if (normFile.endsWith('.service.ts')) {
-    return { framework: isNestImport ? 'nestjs' : 'angular', role: 'service', confidence: 'medium' };
-  }
-  if (normFile.endsWith('.module.ts')) {
-    return { framework: isNestImport ? 'nestjs' : 'angular', role: 'module', confidence: 'medium' };
+    if (isNestImport) return { framework: 'nestjs', role: 'service', confidence: 'medium' };
+    if (isAngularImport) return { framework: 'angular', role: 'service', confidence: 'medium' };
+    if (isHonoImport) return { framework: 'hono', role: 'service', confidence: 'medium' };
+    return undefined;
   }
 
   // Next.js & Hono checks
