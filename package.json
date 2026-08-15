@@ -3,6 +3,10 @@
   "version": "0.5.1",
   "description": "Static analysis CLI for SOLID/DRY/KISS/YAGNI violations in Angular, NestJS, HonoJS, and Next.js codebases",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Diego22rct/tenets.git"
+  },
   "type": "module",
   "bin": {
     "tenets": "dist/cli/index.js"
