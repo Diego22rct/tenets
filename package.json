@@ -1,6 +1,6 @@
 {
   "name": "@diego22rct/tenets",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Static analysis CLI for SOLID/DRY/KISS/YAGNI violations in Angular, NestJS, HonoJS, and Next.js codebases",
   "license": "MIT",
   "repository": {
