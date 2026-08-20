@@ -63,6 +63,7 @@ export interface ParsedFacts {
   dynamicImportFacts: DynamicImportFact[];
   skippedFiles: string[];
   totalLoc: number;
+  fileLocMap: Map<string, number>;
 }
 
 export function parseFacts(rootPath: string): ParsedFacts {
@@ -80,6 +81,7 @@ export function parseFiles(files: string[], rootPath: string): ParsedFacts {
     dynamicImportFacts: [],
     skippedFiles: [],
     totalLoc: 0,
+    fileLocMap: new Map(),
   };
 
   const api = new API({ cwd: rootPath });
@@ -93,7 +95,9 @@ export function parseFiles(files: string[], rootPath: string): ParsedFacts {
         continue;
       }
       collectFileFacts(sourceFile, file, facts);
-      facts.totalLoc += sourceFile.getLineAndCharacterOfPosition(sourceFile.end).line;
+      const loc = sourceFile.getLineAndCharacterOfPosition(sourceFile.end).line;
+      facts.fileLocMap.set(file, loc);
+      facts.totalLoc += loc;
     }
   } finally {
     api.close();
@@ -858,9 +862,35 @@ function computeNormalizedBodySignature(node: Node): string {
   return parts.join('|');
 }
 
-function isSourceFileName(name: string): boolean {
+export function isSourceFileName(name: string): boolean {
   if (name.endsWith('.d.ts')) return false;
   return name.endsWith('.ts') || name.endsWith('.tsx');
+}
+
+export function findProjectRoot(targetPath: string): string {
+  const resolved = path.resolve(targetPath);
+  let currentDir = fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()
+    ? resolved
+    : path.dirname(resolved);
+
+  const fallback = currentDir;
+
+  while (true) {
+    if (
+      fs.existsSync(path.join(currentDir, 'package.json')) ||
+      fs.existsSync(path.join(currentDir, 'tsconfig.json')) ||
+      fs.existsSync(path.join(currentDir, '.git'))
+    ) {
+      return currentDir;
+    }
+    const parent = path.dirname(currentDir);
+    if (parent === currentDir) {
+      break;
+    }
+    currentDir = parent;
+  }
+
+  return fallback;
 }
 
 const EXCLUDED_DIRECTORY_NAMES = new Set([

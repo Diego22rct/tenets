@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { analyze } from './analyze.js';
 
@@ -339,6 +341,84 @@ describe('analyze', () => {
 
     expect(result.framework).toBe('unspecialized');
     expect(result.frameworks).toEqual([]);
+  });
+
+  it('analyzes a single file within project context without false positive unused-export if imported elsewhere', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-single-file-'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'test-project' }));
+    const srcDir = path.join(dir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+
+    const utilsFile = path.join(srcDir, 'utils.ts');
+    const mainFile = path.join(srcDir, 'main.ts');
+
+    fs.writeFileSync(
+      utilsFile,
+      `export function usedHelper(): number { return 42; }
+export function unusedHelper(): number { return 0; }
+`,
+    );
+
+    fs.writeFileSync(
+      mainFile,
+      `import { usedHelper } from './utils.js';
+console.log(usedHelper());
+`,
+    );
+
+    const result = await analyze({ path: utilsFile });
+
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]?.ruleId).toBe('yagni/unused-export');
+    expect(result.findings[0]?.message).toContain('unusedHelper');
+    expect(result.findings[0]?.location.file).toBe(utilsFile);
+    expect(result.score).toBeGreaterThan(0);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('filters findings to only the targeted single file, ignoring violations in other project files', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-single-filter-'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'test-project' }));
+    const srcDir = path.join(dir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+
+    const targetFile = path.join(srcDir, 'target.ts');
+    const otherFile = path.join(srcDir, 'other.ts');
+
+    fs.writeFileSync(
+      targetFile,
+      `export function cleanFunction(): number { return 1; }
+`,
+    );
+
+    fs.writeFileSync(
+      otherFile,
+      `import { cleanFunction } from './target.js';
+export function unimportedOther(): number {
+  return cleanFunction();
+}
+`,
+    );
+
+    const result = await analyze({ path: targetFile });
+
+    expect(result.findings).toEqual([]);
+    expect(result.score).toBe(0);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('throws a descriptive error when target file is not a supported TypeScript file', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-non-ts-'));
+    const readmeFile = path.join(dir, 'README.md');
+    fs.writeFileSync(readmeFile, '# Hello');
+
+    await expect(analyze({ path: readmeFile })).rejects.toThrow(
+      /is not a supported TypeScript file \(\.ts, \.tsx\)/,
+    );
+
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });
 

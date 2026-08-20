@@ -126,3 +126,59 @@ export default app;
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe('findProjectRoot', () => {
+  it('finds project root containing package.json from a nested file', async () => {
+    const { findProjectRoot } = await import('./typescript-adapter.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-root-'));
+    const nestedDir = path.join(dir, 'src', 'components');
+    fs.mkdirSync(nestedDir, { recursive: true });
+    const pkgJson = path.join(dir, 'package.json');
+    fs.writeFileSync(pkgJson, '{}');
+    const targetFile = path.join(nestedDir, 'Button.tsx');
+    fs.writeFileSync(targetFile, 'export const Button = () => null;');
+
+    const root = findProjectRoot(targetFile);
+    expect(root).toBe(dir);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('finds project root containing tsconfig.json or .git', async () => {
+    const { findProjectRoot } = await import('./typescript-adapter.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-gitroot-'));
+    const nestedDir = path.join(dir, 'src');
+    fs.mkdirSync(nestedDir, { recursive: true });
+    fs.mkdirSync(path.join(dir, '.git'));
+    const targetFile = path.join(nestedDir, 'index.ts');
+    fs.writeFileSync(targetFile, 'export const x = 1;');
+
+    const root = findProjectRoot(targetFile);
+    expect(root).toBe(dir);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('falls back to file directory if no root marker is found', async () => {
+    const { findProjectRoot } = await import('./typescript-adapter.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-fallback-'));
+    const targetFile = path.join(dir, 'standalone.ts');
+    fs.writeFileSync(targetFile, 'export const x = 1;');
+
+    const root = findProjectRoot(targetFile);
+    expect(root).toBe(dir);
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('isSourceFileName', () => {
+  it('identifies valid TypeScript source files and rejects declaration/non-ts files', async () => {
+    const { isSourceFileName } = await import('./typescript-adapter.js');
+    expect(isSourceFileName('app.ts')).toBe(true);
+    expect(isSourceFileName('Button.tsx')).toBe(true);
+    expect(isSourceFileName('types.d.ts')).toBe(false);
+    expect(isSourceFileName('package.json')).toBe(false);
+    expect(isSourceFileName('styles.css')).toBe(false);
+  });
+});

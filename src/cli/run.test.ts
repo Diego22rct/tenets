@@ -204,6 +204,27 @@ describe('runCli', () => {
     expect(result.stdout).toContain('install');
   });
 
+  it('run a subcommand not in the list of allowed subcommands', async () => {
+    const result = await runCli(['bogus-subcommand']);
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain('tenets: unknown command: bogus-subcommand');
+    expect(result.stdout).toContain('Allowed commands are: install');
+    expect(result.stdout).toContain('Run \'@diego22rct/tenets --help\' for usage information.');
+
+    const result2 = await runCli(['bogus-subcommand', 'some/path']);
+    expect(result2.exitCode).toBe(2);
+    expect(result2.stdout).toContain('tenets: unknown command: bogus-subcommand');
+    expect(result2.stdout).toContain('Allowed commands are: install');
+    expect(result2.stdout).toContain('Run \'@diego22rct/tenets --help\' for usage information.');
+  });
+
+  it('treats a non-existent file with an extension as a path rather than an unknown command', async () => {
+    const result = await runCli(['missing-file.ts']);
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain("failed to analyze 'missing-file.ts'");
+    expect(result.stdout).not.toContain('unknown command');
+  });
+
   it('displays framework: Hono (specialized rules applied) in terminal output for Hono projects', async () => {
     const target = path.join(coreFixturesDir, 'hono-support');
 
@@ -242,6 +263,52 @@ describe('runCli', () => {
     expect(agentsContent).toContain('https://github.com/Diego22rct/tenets/issues');
     expect(claudeContent).toContain('false positive');
     expect(claudeContent).toContain('https://github.com/Diego22rct/tenets/issues');
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('runs analysis on a single file in a project and reports only that file\'s findings', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-cli-single-'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'test-project' }));
+    const srcDir = path.join(dir, 'src');
+    fs.mkdirSync(srcDir, { recursive: true });
+
+    const utilsFile = path.join(srcDir, 'utils.ts');
+    const mainFile = path.join(srcDir, 'main.ts');
+
+    fs.writeFileSync(
+      utilsFile,
+      `export function importedFn(): number { return 42; }
+export function orphanFn(): number { return 0; }
+`,
+    );
+
+    fs.writeFileSync(
+      mainFile,
+      `import { importedFn } from './utils.js';
+console.log(importedFn());
+`,
+    );
+
+    const result = await runCli([utilsFile]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain('orphanFn');
+    expect(result.stdout).toContain('yagni/unused-export');
+    expect(result.stdout).not.toContain('importedFn');
+
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits 2 with a descriptive error when target file is not a TypeScript file', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tenets-cli-non-ts-'));
+    const cssFile = path.join(dir, 'style.css');
+    fs.writeFileSync(cssFile, 'body { color: red; }');
+
+    const result = await runCli([cssFile]);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain('is not a supported TypeScript file (.ts, .tsx)');
 
     fs.rmSync(dir, { recursive: true, force: true });
   });
